@@ -91,5 +91,13 @@
       <screen x="67" y="27" width="1853" height="1053" />
     </state>
     <state x="475" y="187" key="SettingsEditor/67.27.1853.1053@67.27.1853.1053" timestamp="1580849269533" />
+    <state x="588" y="288" width="800" height="528" key="Vcs.Push.Dialog.v2" timestamp="1580852365767">
+      <screen x="67" y="27" width="1853" height="1053" />
+    </state>
+    <state x="588" y="288" width="800" height="528" key="Vcs.Push.Dialog.v2/67.27.1853.1053@67.27.1853.1053" timestamp="1580852365767" />
+    <state x="167" y="125" width="1653" height="855" key="com.intellij.dvcs.ui.CompareBranchesDialog" timestamp="1580852388161">
+      <screen x="67" y="27" width="1853" height="1053" />
+    </state>
+    <state x="167" y="125" width="1653" height="855" key="com.intellij.dvcs.ui.CompareBranchesDialog/67.27.1853.1053@67.27.1853.1053" timestamp="1580852388161" />
   </component>
 </project>

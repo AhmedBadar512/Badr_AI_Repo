@@ -26,8 +26,8 @@ def display(img_list, seg_list, pred_list=None):
     else:
         final_img = np.concatenate([new_img, new_seg])
     print(final_img.shape)
-    cv2.namedWindow("My_Window", 0)
-    cv2.imshow("My_Window", final_img)
+    cv2.namedWindow("My_Windows", 0)
+    cv2.imshow("My_Windows", final_img)
     cv2.waitKey()
     cv2.destroyAllWindows()
 
