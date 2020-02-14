@@ -36,8 +36,8 @@ class customSeperableConv(K.layers.Layer):
          return tensor
 
 
-myLayer = customSeperableConv(10, (3, 3), 2, data_format="NHWC")
-import numpy as np
-
-x = np.random.rand(1, 256, 256, 3)
-print(myLayer(x).shape)
+# myLayer = customSeperableConv(10, (3, 3), 2, data_format='NCHW')
+# import numpy as np
+#
+# x = np.random.rand(1, 3, 256, 256)
+# print(myLayer(x))
