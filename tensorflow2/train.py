@@ -28,8 +28,7 @@ def display(img_list, seg_list, pred_list=None):
     print(final_img.shape)
     cv2.namedWindow("My_Window", 0)
     cv2.imshow("My_Window", final_img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
+    cv2.waitKey(3000)
 
 
 def get_images(features, shp=(256, 512)):
@@ -52,7 +51,7 @@ get_images_new = lambda features: get_images(features, (512, 1024))
 ds_train_new = ds_train.map(get_images_new).repeat()
 ds_val_new = ds_val.map(get_images)
 
-for features in ds_train_new.take(1):
+for features in ds_train_new:
     image, segmentation = features
-
-display(image, segmentation)
+    display(image, segmentation)
+cv2.destroyAllWindows()
