@@ -1,5 +1,4 @@
 import tensorflow as tf
-import numpy as np
 
 
 def custom_miou(y_true, y_pred):
@@ -14,10 +13,3 @@ def custom_miou(y_true, y_pred):
     m = tf.keras.metrics.MeanIoU(30)
     m.update_state(y_true, y_pred)
     return y_true, y_pred, m
-
-
-# x = np.random.rand(1, 4, 4, 2)
-# y, _, miou = custom_miou(x, np.random.rand(1, 4, 4, 2))
-# print(x.shape, y.shape)
-# print(y)
-# print(miou.result())

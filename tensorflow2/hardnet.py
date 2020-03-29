@@ -1,4 +1,4 @@
-import tensorflow2.layers as l
+import layers as l
 import tensorflow.keras as K
 
 
