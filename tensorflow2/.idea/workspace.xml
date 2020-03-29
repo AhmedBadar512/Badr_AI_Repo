@@ -11,9 +11,8 @@
   <component name="ChangeListManager">
     <list default="true" id="6de608c4-987b-4993-8e62-7cceda333a7b" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/../hardnet.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../hardnet.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/tensorflow2.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tensorflow2.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/visualization_dicts.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualization_dicts.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -85,11 +84,35 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1580849253153</updated>
-      <workItem from="1585486075995" duration="995000" />
+      <workItem from="1585486075995" duration="1280000" />
     </task>
+    <task id="LOCAL-00001" summary="deleted unwanted data file">
+      <created>1585487209168</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1585487209168</updated>
+    </task>
+    <task id="LOCAL-00002" summary="deleted further unwanted files and fixed format">
+      <created>1585487338685</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1585487338685</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="deleted unwanted data file" />
+    <MESSAGE value="deleted further unwanted files and fixed format" />
+    <option name="LAST_COMMIT_MESSAGE" value="deleted further unwanted files and fixed format" />
+  </component>
   <component name="WindowStateProjectService">
+    <state x="585" y="114" key="CommitChangelistDialog2" timestamp="1585487338229">
+      <screen x="0" y="0" width="1920" height="1040" />
+    </state>
+    <state x="585" y="114" key="CommitChangelistDialog2/0.0.1920.1040@0.0.1920.1040" timestamp="1585487338229" />
     <state width="1830" height="278" key="GridCell.Tab.0.bottom" timestamp="1580849624881">
       <screen x="67" y="27" width="1853" height="1053" />
     </state>
@@ -111,9 +134,10 @@
     </state>
     <state x="423" y="158" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1585486096094" />
     <state x="475" y="187" key="SettingsEditor/67.27.1853.1053@67.27.1853.1053" timestamp="1580849269533" />
-    <state x="588" y="288" width="800" height="528" key="Vcs.Push.Dialog.v2" timestamp="1580852365767">
-      <screen x="67" y="27" width="1853" height="1053" />
+    <state x="540" y="258" width="800" height="528" key="Vcs.Push.Dialog.v2" timestamp="1585487349909">
+      <screen x="0" y="0" width="1920" height="1040" />
     </state>
+    <state x="540" y="258" key="Vcs.Push.Dialog.v2/0.0.1920.1040@0.0.1920.1040" timestamp="1585487349909" />
     <state x="588" y="288" width="800" height="528" key="Vcs.Push.Dialog.v2/67.27.1853.1053@67.27.1853.1053" timestamp="1580852365767" />
     <state x="167" y="125" width="1653" height="855" key="com.intellij.dvcs.ui.CompareBranchesDialog" timestamp="1580852388161">
       <screen x="67" y="27" width="1853" height="1053" />
