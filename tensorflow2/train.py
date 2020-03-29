@@ -28,8 +28,8 @@ dataset_validation = dataset['validation'] if 'validation' in splits else None
 assert dataset_train is not None, "Training dataset can not be None"
 assert (dataset_test or dataset_validation) is not None, "Either test or validation dataset should not be None"
 
-dataset_train = dataset_train.shuffle(1000).batch(batch_size, drop_remainder=True)
-dataset_test = dataset_test.shuffle(1000).batch(batch_size, drop_remainder=True) \
+dataset_train = dataset_train.shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
+dataset_test = dataset_test.shuffle(1024, ).repeat().shuffle(1024, reshuffle_each_iteration=True).batch(batch_size, drop_remainder=True) \
     if (dataset_test is not None) else None
 dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
@@ -68,11 +68,11 @@ writer = tf.summary.create_file_writer(logdir)
 writer.set_as_default()
 
 for epoch in range(epochs):
-    for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test.repeat().shuffle(1024, reshuffle_each_iteration=True))):
+    for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
         loss = train_step(tf.cast(mini_batch['image'], tf.float32), tf.one_hot(mini_batch['label'], 10), model, optimizer)
         val_loss = losses.get_loss(model(val_mini_batch['image']/1),
                                    labels=tf.one_hot(mini_batch['label'], 10),
-                                   name='categorical_crossentropy',
+                                   name='cross_entropy',
                                    from_logits=True)
         print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()))
         tf.summary.scalar("loss", loss,
