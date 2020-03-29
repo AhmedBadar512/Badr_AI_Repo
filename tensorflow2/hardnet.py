@@ -67,7 +67,7 @@ class HarDBlock(K.Model):
 
 
 class HarDNet(K.Model):
-    def __init__(self, depth_wise=False, arch=85, pretrained=True, num_classes=10, weight_path=''):
+    def __init__(self, depth_wise=False, arch=85, num_classes=10):
         super().__init__()
         first_ch = [32, 64]
         second_kernel = 3
@@ -154,5 +154,5 @@ class HarDNet(K.Model):
 
 if __name__ == "__main__":
     model = HarDNet(depth_wise=True, arch=39)
-    model.build(input_shape=(1, 3, 512, 512))
+    model.build(input_shape=(1, 512, 512, 3))
     print(model.summary())

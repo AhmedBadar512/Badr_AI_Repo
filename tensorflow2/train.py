@@ -1,16 +1,19 @@
 import tensorflow as tf
+from models import *
 import tensorflow.keras as K
-import numpy as np
 import tensorflow_datasets as tfds
+import losses
 
 
-dataset_name = "food101"
+dataset_name = "fashion_mnist"
 logdir = "/home/badar/Code/Badr_AI_Repo/logs"
 epochs = 5
 batch_size = 24
 n_classes = 10
 total_steps = 0
 optimizer_name = "Adam"
+lr = 1e-4
+momentum = 0.9
 
 
 # =========== Load Dataset ============ #
@@ -34,3 +37,46 @@ dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_rem
 eval_dataset = dataset_validation if dataset_validation else dataset_test
 
 # =========== Optimizer and Training Setup ============ #
+
+if optimizer_name == "Adam":
+    optimizer = K.optimizers.Adam(learning_rate=lr)
+else:
+    optimizer = K.optimizers.SGD(learning_rate=lr, momentum=momentum)
+
+
+def train_step(input_imgs, labels, model, optim):
+    """
+    Train step for model
+    :param input_imgs: Input image tensors
+    :param labels: GT labels
+    :param model: Keras model to be trained
+    :param optim: keras/tf optimizer
+    :return: loss value
+    """
+    with tf.GradientTape() as tape:
+        logits = model(input_imgs)
+        loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, logits, from_logits=True))
+    grads = tape.gradient(loss, model.trainable_variables)
+    optim.apply_gradients(zip(grads, model.trainable_variables))
+    return loss
+
+# =========== Training ============ #
+
+
+model = get_model('HarDNet', arch=39, depth_wise=True)
+writer = tf.summary.create_file_writer(logdir)
+writer.set_as_default()
+
+for epoch in range(epochs):
+    for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test.repeat().shuffle(1024, reshuffle_each_iteration=True))):
+        loss = train_step(tf.cast(mini_batch['image'], tf.float32), tf.one_hot(mini_batch['label'], 10), model, optimizer)
+        val_loss = losses.get_loss(model(val_mini_batch['image']/1),
+                                   labels=tf.one_hot(mini_batch['label'], 10),
+                                   name='categorical_crossentropy',
+                                   from_logits=True)
+        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()))
+        tf.summary.scalar("loss", loss,
+                          step=total_steps+step)
+        tf.summary.scalar("val_loss", val_loss,
+                          step=total_steps+step)
+    total_steps += (step + 1)
