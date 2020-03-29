@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="CMakeRunConfigurationManager" shouldGenerate="true" shouldDeleteObsolete="true">
+    <generated />
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="6de608c4-987b-4993-8e62-7cceda333a7b" name="Default Changelist" comment="" />
+    <list default="true" id="6de608c4-987b-4993-8e62-7cceda333a7b" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/../hardnet.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../hardnet.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/tensorflow2.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/tensorflow2.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data.py" beforeDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -25,7 +41,9 @@
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent">
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="SearchEverywhereHistoryKey" value="&#9;FILE&#9;file:///volumes1/Code/scene_segmentation/tensorflow2/CityScapes Test.py" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
@@ -67,6 +85,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1580849253153</updated>
+      <workItem from="1585486075995" duration="995000" />
     </task>
     <servers />
   </component>
@@ -87,9 +106,10 @@
       <screen x="67" y="27" width="1853" height="1053" />
     </state>
     <state width="1830" height="278" key="GridCell.Tab.0.right/67.27.1853.1053@67.27.1853.1053" timestamp="1580849624881" />
-    <state x="475" y="187" key="SettingsEditor" timestamp="1580849269533">
-      <screen x="67" y="27" width="1853" height="1053" />
+    <state x="423" y="158" key="SettingsEditor" timestamp="1585486096094">
+      <screen x="0" y="0" width="1920" height="1040" />
     </state>
+    <state x="423" y="158" key="SettingsEditor/0.0.1920.1040@0.0.1920.1040" timestamp="1585486096094" />
     <state x="475" y="187" key="SettingsEditor/67.27.1853.1053@67.27.1853.1053" timestamp="1580849269533" />
     <state x="588" y="288" width="800" height="528" key="Vcs.Push.Dialog.v2" timestamp="1580852365767">
       <screen x="67" y="27" width="1853" height="1053" />
