@@ -1,9 +1,9 @@
 import tensorflow.keras as K
 
 
-class convbnrelu(K.layers.Layer):
+class ConvBNRelu(K.layers.Layer):
     def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
-        super(convbnrelu, self).__init__()
+        super(ConvBNRelu, self).__init__()
         self.filters = filters
         self.kernels = kernels
         self.strides = strides
@@ -34,9 +34,9 @@ class convbnrelu(K.layers.Layer):
         return tensor
 
 
-class dwconvbnrelu(K.layers.Layer):
+class DWConvBNRelu(K.layers.Layer):
     def __init__(self, depth_multiplier=1, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
-        super(dwconvbnrelu, self).__init__()
+        super(DWConvBNRelu, self).__init__()
         self.depth_multiplier = depth_multiplier
         self.kernels = kernels
         self.strides = strides
@@ -67,9 +67,9 @@ class dwconvbnrelu(K.layers.Layer):
         return tensor
 
 
-class combconv(K.layers.Layer):
+class CombConv(K.layers.Layer):
     def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
-        super(combconv, self).__init__()
+        super(CombConv, self).__init__()
         self.filters = filters
         self.kernels = kernels
         self.strides = strides
@@ -79,14 +79,8 @@ class combconv(K.layers.Layer):
         self.use_bias = use_bias
 
     def build(self, inputs_shape):
-        if self.data_format == 'NHWC':
-            channel_index = -1
-            data_format_keras = 'channels_last'
-        elif self.data_format == 'NCHW':
-            channel_index = 1
-            data_format_keras = 'channels_first'
-        self.dw = dwconvbnrelu(kernels=self.kernels, strides=self.strides, padding=self.padding, data_format=self.data_format)
-        self.pw = convbnrelu(self.filters, kernels=(1, 1), padding=self.padding, data_format=self.data_format)
+        self.dw = DWConvBNRelu(kernels=self.kernels, strides=self.strides, padding=self.padding, data_format=self.data_format)
+        self.pw = ConvBNRelu(self.filters, kernels=(1, 1), padding=self.padding, data_format=self.data_format)
 
     def call(self, inputs):
         tensor = self.pw(inputs)
