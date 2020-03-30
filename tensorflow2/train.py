@@ -14,6 +14,7 @@ total_steps = 0
 optimizer_name = "Adam"
 lr = 1e-4
 momentum = 0.9
+model_name = "HarDNet"
 
 
 # =========== Load Dataset ============ #
@@ -63,7 +64,7 @@ def train_step(input_imgs, labels, model, optim):
 # =========== Training ============ #
 
 
-model = get_model('HarDNet', arch=39, depth_wise=True)
+model = get_model(model_name, arch=39, depth_wise=True)
 writer = tf.summary.create_file_writer(logdir)
 writer.set_as_default()
 
