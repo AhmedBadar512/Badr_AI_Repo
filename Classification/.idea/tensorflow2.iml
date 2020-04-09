@@ -4,6 +4,15 @@
     <facet type="Python" name="Python facet">
       <configuration sdkName="Python 3.7" />
     </facet>
+    <facet type="Python" name="Python facet">
+      <configuration sdkName="Python 3.7" />
+    </facet>
+    <facet type="Python" name="Python facet">
+      <configuration sdkName="Python 3.7" />
+    </facet>
+    <facet type="Python" name="Python facet">
+      <configuration sdkName="Python 3.7" />
+    </facet>
   </component>
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$" />
