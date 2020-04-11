@@ -2,7 +2,8 @@ import tensorflow.keras as K
 
 
 class ConvBNRelu(K.layers.Layer):
-    def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
+    def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1,
+                 use_bias=False):
         super(ConvBNRelu, self).__init__()
         self.filters = filters
         self.kernels = kernels
@@ -27,6 +28,7 @@ class ConvBNRelu(K.layers.Layer):
                                     padding=self.padding.lower(),
                                     data_format=data_format_keras,
                                     use_bias=False)
+
     def call(self, inputs):
         tensor = self.conv(inputs)
         tensor = self.bn(tensor)
@@ -35,7 +37,8 @@ class ConvBNRelu(K.layers.Layer):
 
 
 class DWConvBNRelu(K.layers.Layer):
-    def __init__(self, depth_multiplier=1, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
+    def __init__(self, depth_multiplier=1, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1,
+                 use_bias=False):
         super(DWConvBNRelu, self).__init__()
         self.depth_multiplier = depth_multiplier
         self.kernels = kernels
@@ -60,6 +63,7 @@ class DWConvBNRelu(K.layers.Layer):
                                              data_format=data_format_keras,
                                              depth_multiplier=self.depth_multiplier,
                                              use_bias=False)
+
     def call(self, inputs):
         tensor = self.conv(inputs)
         tensor = self.bn(tensor)
@@ -68,7 +72,8 @@ class DWConvBNRelu(K.layers.Layer):
 
 
 class CombConv(K.layers.Layer):
-    def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1, use_bias=False):
+    def __init__(self, filters, kernels=(3, 3), strides=1, padding="SAME", data_format="NHWC", dilations=1,
+                 use_bias=False):
         super(CombConv, self).__init__()
         self.filters = filters
         self.kernels = kernels
@@ -79,7 +84,8 @@ class CombConv(K.layers.Layer):
         self.use_bias = use_bias
 
     def build(self, inputs_shape):
-        self.dw = DWConvBNRelu(kernels=self.kernels, strides=self.strides, padding=self.padding, data_format=self.data_format)
+        self.dw = DWConvBNRelu(kernels=self.kernels, strides=self.strides, padding=self.padding,
+                               data_format=self.data_format)
         self.pw = ConvBNRelu(self.filters, kernels=(1, 1), padding=self.padding, data_format=self.data_format)
 
     def call(self, inputs):
