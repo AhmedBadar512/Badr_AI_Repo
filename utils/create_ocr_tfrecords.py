@@ -128,4 +128,6 @@ def _parse_image_function(example_proto):
 parsed_image_dataset = raw_image_dataset.map(_parse_image_function)
 
 for image_features in parsed_image_dataset:
-    image_raw = image_features['image_raw']  # the image as a tensor
+    image_raw = image_features['image_raw'].numpy()  # the image as a tensor
+    x = tf.io.decode_jpeg(image_raw, 3)
+    print(x.shape)
