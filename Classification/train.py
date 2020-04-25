@@ -5,8 +5,8 @@ import tensorflow_datasets as tfds
 import losses
 
 
-dataset_name = "fashion_mnist"
-logdir = "/home/badar/Code/Badr_AI_Repo/logs"
+dataset_name = "mnist"
+logdir = "logs"
 epochs = 5
 batch_size = 24
 n_classes = 10
@@ -64,18 +64,18 @@ def train_step(input_imgs, labels, model, optim):
 # =========== Training ============ #
 
 
-model = get_model(model_name, arch=39, depth_wise=True)
+model = get_model(model_name, arch=85, depth_wise=False)
 writer = tf.summary.create_file_writer(logdir)
 writer.set_as_default()
 
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
-        loss = train_step(tf.cast(mini_batch['image'], tf.float32), tf.one_hot(mini_batch['label'], 10), model, optimizer)
+        loss = train_step(tf.cast(mini_batch['image'], tf.float32), tf.one_hot(mini_batch['label'], n_classes), model, optimizer)
         val_loss = losses.get_loss(model(val_mini_batch['image']/1),
-                                   labels=tf.one_hot(mini_batch['label'], 10),
+                                   labels=tf.one_hot(mini_batch['label'], n_classes),
                                    name='cross_entropy',
                                    from_logits=True)
-        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()))
+        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()), end='     \r', flush=True)
         tf.summary.scalar("loss", loss,
                           step=total_steps+step)
         tf.summary.scalar("val_loss", val_loss,

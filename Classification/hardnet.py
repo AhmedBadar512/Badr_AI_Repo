@@ -38,9 +38,6 @@ class HarDBlock(K.Model):
         self.layers_list = layers_
         self.concatenate = K.layers.Concatenate(axis=-1)
 
-    def get_out_ch(self):
-        return self.out_channels
-
     def call(self, x):
         layers_ = [x]
 
@@ -125,7 +122,6 @@ class HarDNet(K.Model):
         ch = first_ch[1]
         for i in range(blks):
             blk = HarDBlock(ch, gr[i], grmul, n_layers[i], dwconv=depth_wise)
-            ch = blk.get_out_ch()
             self.base.append(blk)
 
             if i == blks - 1 and arch == 85:
