@@ -5,16 +5,16 @@ import tensorflow_datasets as tfds
 import losses
 
 
-dataset_name = "mnist"
+dataset_name = "cifar10"
 logdir = "logs"
-epochs = 5
-batch_size = 24
+epochs = 200
+batch_size = 128
 n_classes = 10
 total_steps = 0
-optimizer_name = "Adam"
-lr = 1e-4
+optimizer_name = "SGD"
+lr = 0.001
 momentum = 0.9
-model_name = "HarDNet"
+model_name = "resnet20"
 
 
 # =========== Load Dataset ============ #
@@ -38,11 +38,13 @@ dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_rem
 eval_dataset = dataset_validation if dataset_validation else dataset_test
 
 # =========== Optimizer and Training Setup ============ #
-
+lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000], [lr, lr/10, lr/100, lr/1000, lr/1e4])
 if optimizer_name == "Adam":
-    optimizer = K.optimizers.Adam(learning_rate=lr)
+    optimizer = K.optimizers.Adam(learning_rate=lr_scheduler)
+elif optimizer_name == "RMSProp":
+    optimizer = K.optimizers.RMSprop(learning_rate=lr_scheduler, momentum=momentum)
 else:
-    optimizer = K.optimizers.SGD(learning_rate=lr, momentum=momentum)
+    optimizer = K.optimizers.SGD(learning_rate=lr_scheduler, momentum=momentum)
 
 
 def train_step(input_imgs, labels, model, optim):
@@ -57,6 +59,7 @@ def train_step(input_imgs, labels, model, optim):
     with tf.GradientTape() as tape:
         logits = model(input_imgs)
         loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, logits, from_logits=True))
+        # loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, probs))
     grads = tape.gradient(loss, model.trainable_variables)
     optim.apply_gradients(zip(grads, model.trainable_variables))
     return loss
@@ -64,20 +67,20 @@ def train_step(input_imgs, labels, model, optim):
 # =========== Training ============ #
 
 
-model = get_model(model_name, arch=85, depth_wise=False)
+model = get_model(model_name, num_classes=n_classes)
 writer = tf.summary.create_file_writer(logdir)
 writer.set_as_default()
-
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
-        loss = train_step(tf.cast(mini_batch['image'], tf.float32), tf.one_hot(mini_batch['label'], n_classes), model, optimizer)
-        val_loss = losses.get_loss(model(val_mini_batch['image']/1),
+        loss = train_step(mini_batch['image']/255, tf.one_hot(mini_batch['label'], n_classes), model, optimizer)
+        val_loss = losses.get_loss(model(val_mini_batch['image']/255),
                                    labels=tf.one_hot(mini_batch['label'], n_classes),
                                    name='cross_entropy',
-                                   from_logits=True)
+                                   from_logits=False)
         print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()), end='     \r', flush=True)
         tf.summary.scalar("loss", loss,
                           step=total_steps+step)
         tf.summary.scalar("val_loss", val_loss,
                           step=total_steps+step)
+        lr_scheduler(step=total_steps)
     total_steps += (step + 1)

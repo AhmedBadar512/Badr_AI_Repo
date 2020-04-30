@@ -64,7 +64,7 @@ class HarDBlock(K.Model):
 
 
 class HarDNet(K.Model):
-    def __init__(self, depth_wise=False, arch=85, num_classes=10):
+    def __init__(self, depth_wise=False, arch=39, num_classes=10):
         super().__init__()
         first_ch = [32, 64]
         second_kernel = 3
@@ -106,7 +106,7 @@ class HarDNet(K.Model):
         # First Layer: Standard Conv3x3, Stride=2
         self.base.append(
             l.ConvBNRelu(filters=first_ch[0], kernels=3,
-                       strides=2))
+                         strides=2))
 
         # Second Layer
         self.base.append(l.ConvBNRelu(first_ch[1], kernels=second_kernel))
