@@ -1,24 +1,35 @@
-import tensorflow as tf
 from models import *
 import tensorflow.keras as K
 import tensorflow_datasets as tfds
 import losses
+import argparse
+import os
 
+args = argparse.ArgumentParser(description="Train a network with specific settings")
+args.add_argument("--dataset", type=str, default="cifar100", help="Name a dataset from the tf_dataset collection")
+args.add_argument("--n_classes", type=int, default=100, help="Number of classes")
+args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
+args.add_argument("--epochs", type=int, default=1, help="Number of epochs to train")
+args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
+args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
+args.add_argument("--logging_freq", type=int, default=5, help="Add to tfrecords after this many steps")
+args.add_argument("--batch_size", type=int, default=16, help="Size of mini-batch")
+args.add_argument("--model", type=str, default="resnet56", help="Select model")
+args.add_argument("--save_dir", type=str, default="", help="Save directory for models and tensorboard")
+parsed = args.parse_args()
 
-dataset_name = "cifar100"
-logdir = "cifar100_base_test"
-epochs = 200
-batch_size = 128
-n_classes = 100
-total_steps = 0
-optimizer_name = "SGD"
-lr = 0.01
-momentum = 0.9
-model_name = "resnet20"
-log_freq = 5
-# TODO: Create log names based on experiment settings
+dataset_name = parsed.dataset
+epochs = parsed.epochs
+batch_size = parsed.batch_size
+n_classes = parsed.n_classes
+optimizer_name = parsed.optimizer
+lr = parsed.lr
+momentum = parsed.momentum
+model_name = parsed.model
+log_freq = parsed.logging_freq
+logdir = parsed.save_dir + "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}".format(dataset_name, epochs, batch_size,
+                                                                        optimizer_name, lr, model_name)
 # TODO: Add save option, with a save_dir
-# TODO: Create args for console arguments
 
 # =========== Load Dataset ============ #
 
@@ -32,8 +43,12 @@ dataset_validation = dataset['validation'] if 'validation' in splits else None
 assert dataset_train is not None, "Training dataset can not be None"
 assert (dataset_test or dataset_validation) is not None, "Either test or validation dataset should not be None"
 
-dataset_train = dataset_train.shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
-dataset_test = dataset_test.shuffle(1024, ).repeat().shuffle(1024, reshuffle_each_iteration=True).batch(batch_size, drop_remainder=True) \
+total_samples = len(list(dataset_train))
+dataset_train = dataset_train.take(160).shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(
+    tf.data.experimental.AUTOTUNE)
+#  TODO: Get dataset shape
+dataset_test = dataset_test.shuffle(1024, ).repeat().shuffle(1024, reshuffle_each_iteration=True).batch(batch_size,
+                                                                                                        drop_remainder=True) \
     if (dataset_test is not None) else None
 dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
@@ -41,7 +56,8 @@ dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_rem
 eval_dataset = dataset_validation if dataset_validation else dataset_test
 
 # =========== Optimizer and Training Setup ============ #
-lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000], [lr, lr/10, lr/100, lr/1000, lr/1e4])
+lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
+                                                                    [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
 if optimizer_name == "Adam":
     optimizer = K.optimizers.Adam(learning_rate=lr_scheduler)
 elif optimizer_name == "RMSProp":
@@ -51,6 +67,7 @@ else:
 
 train_metrics = [tf.keras.metrics.Accuracy()]
 val_metrics = [tf.keras.metrics.Accuracy()]
+total_steps = 0
 
 
 def train_step(input_imgs, labels, model, optim):
@@ -70,6 +87,7 @@ def train_step(input_imgs, labels, model, optim):
     optim.apply_gradients(zip(grads, model.trainable_variables))
     return loss
 
+
 # =========== Training ============ #
 
 
@@ -79,21 +97,24 @@ val_writer = tf.summary.create_file_writer(logdir + "/validation")
 test_writer = tf.summary.create_file_writer(logdir + "/test")
 
 # TODO: Add a proper way of handling logs in absence of validation or test data
+ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, iterator=dataset_train)
+manager = tf.train.CheckpointManager(ckpt,  logdir + "/models/", max_to_keep=10)
 
 # writer.set_as_default()
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
-        train_probs = tf.nn.softmax(model(mini_batch['image']/255))
+        train_probs = tf.nn.softmax(model(mini_batch['image'] / 255))
         train_labs = tf.one_hot(mini_batch['label'], n_classes)
-        val_probs = tf.nn.softmax(model(val_mini_batch['image']/255))
+        val_probs = tf.nn.softmax(model(val_mini_batch['image'] / 255))
         val_labs = tf.one_hot(val_mini_batch['label'], n_classes)
 
-        loss = train_step(mini_batch['image']/255, train_labs, model, optimizer)
+        loss = train_step(mini_batch['image'] / 255, train_labs, model, optimizer)
         val_loss = losses.get_loss(val_probs,
                                    val_labs,
                                    name='cross_entropy',
                                    from_logits=False)
-        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step*batch_size, 60000, loss.numpy(), val_loss.numpy()), end='     \r', flush=True)
+        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(),
+                                                              val_loss.numpy()), end='     \r', flush=True)
         curr_step = total_steps + step
         if curr_step % log_freq == 0:
             with train_writer.as_default():
@@ -116,3 +137,5 @@ for epoch in range(epochs):
     for t_metric, v_metric in zip(train_metrics, val_metrics):
         t_metric.reset_states()
         v_metric.reset_states()
+    ckpt.step.assign_add(step + 1)
+    manager.save()
