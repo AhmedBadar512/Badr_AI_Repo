@@ -44,7 +44,7 @@ assert dataset_train is not None, "Training dataset can not be None"
 assert (dataset_test or dataset_validation) is not None, "Either test or validation dataset should not be None"
 
 total_samples = len(list(dataset_train))
-dataset_train = dataset_train.take(160).shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(
+dataset_train = dataset_train.shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
 #  TODO: Get dataset shape
 dataset_test = dataset_test.shuffle(1024, ).repeat().shuffle(1024, reshuffle_each_iteration=True).batch(batch_size,
