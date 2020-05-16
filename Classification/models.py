@@ -1,5 +1,6 @@
 from hardnet import *
 from resnet import *
+from probs_resnet import *
 
 
 def get_model(name, **kwargs):
@@ -23,3 +24,7 @@ def get_model(name, **kwargs):
         return resnet_101(**kwargs)
     if name == "resnet152":
         return resnet_152(**kwargs)
+    if name == "pr_resnet20":
+        return pr_resnet_20(**kwargs)
+    if name == "pr_resnet56":
+        return pr_resnet_56(**kwargs)
