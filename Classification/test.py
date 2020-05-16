@@ -1,6 +1,6 @@
 import numpy as np
 from models import *
-
+# TODO: Add args to include the proper model and num_classes to load models, also look into the SavedModel functionality
 
 model = get_model("resnet56", num_classes=100)
 model.build(input_shape=(None, None, None, 3))
