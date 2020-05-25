@@ -6,15 +6,16 @@ import argparse
 import os
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("--dataset", type=str, default="cifar100", help="Name a dataset from the tf_dataset collection")
+args.add_argument("--dataset", type=str, default="cifar10", help="Name a dataset from the tf_dataset collection")
 args.add_argument("--n_classes", type=int, default=100, help="Number of classes")
 args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
-args.add_argument("--epochs", type=int, default=1, help="Number of epochs to train")
-args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
+args.add_argument("--epochs", type=int, default=40, help="Number of epochs to train")
+args.add_argument("--lr", type=float, default=1e-3, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=5, help="Add to tfrecords after this many steps")
 args.add_argument("--batch_size", type=int, default=16, help="Size of mini-batch")
-args.add_argument("--model", type=str, default="resnet56", help="Select model")
+args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
+args.add_argument("--model", type=str, default="pr_resnet56", help="Select model")
 args.add_argument("--save_dir", type=str, default="", help="Save directory for models and tensorboard")
 parsed = args.parse_args()
 
@@ -138,4 +139,5 @@ for epoch in range(epochs):
         t_metric.reset_states()
         v_metric.reset_states()
     ckpt.step.assign_add(step + 1)
-    manager.save()
+    if epoch % parsed.save_interval:
+        manager.save()
