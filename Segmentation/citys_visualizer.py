@@ -7,9 +7,9 @@ import cv2
 import visualization_dicts as vis
 import numpy as np
 
-ds_train = tfds.load(name="cityscapes", split='train')
+ds_train = tfds.load(name="cityscapes", split='train', data_dir="/tmp/tfds/")
 ds_train = ds_train.shuffle(100).batch(4)
-ds_val = tfds.load(name="cityscapes", split='validation')
+ds_val = tfds.load(name="cityscapes", split='validation', data_dir="/tmp/tfds/")
 ds_val = ds_val.batch(4)
 
 

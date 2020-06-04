@@ -4,6 +4,9 @@ import tensorflow_datasets as tfds
 import losses
 import argparse
 import os
+physical_devices = tf.config.experimental.list_physical_devices("GPU")
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("--dataset", type=str, default="cifar10", help="Name a dataset from the tf_dataset collection")
@@ -34,7 +37,7 @@ logdir = parsed.save_dir + "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}".format(dataset_
 
 # =========== Load Dataset ============ #
 
-dataset = tfds.load(dataset_name)
+dataset = tfds.load(dataset_name, data_dir="/tmp/tfds/")
 splits = list(dataset.keys())
 dataset_train = dataset['train'] if 'train' in splits else None
 dataset_test = dataset['test'] if 'test' in splits else None
