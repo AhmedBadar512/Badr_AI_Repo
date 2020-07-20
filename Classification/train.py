@@ -1,4 +1,4 @@
-from models import *
+from models import get_model
 import tensorflow.keras as K
 import tensorflow_datasets as tfds
 import losses
@@ -106,6 +106,7 @@ ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, 
 manager = tf.train.CheckpointManager(ckpt,  logdir + "/models/", max_to_keep=10)
 
 # writer.set_as_default()
+step = 0
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
         train_probs = tf.nn.softmax(model(mini_batch['image'] / 255))
