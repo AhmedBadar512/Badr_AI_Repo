@@ -7,11 +7,6 @@ import cv2
 import visualization_dicts as vis
 import numpy as np
 
-ds_train = tfds.load(name="cityscapes", split='train', data_dir="/tmp/tfds/")
-ds_train = ds_train.shuffle(100).batch(4)
-ds_val = tfds.load(name="cityscapes", split='validation', data_dir="/tmp/tfds/")
-ds_val = ds_val.batch(4)
-
 
 def display(img_list, seg_list, pred_list=None):
     seg_list = vis.gpu_cs_labels(seg_list, False)
@@ -46,12 +41,20 @@ def get_images(features, shp=(256, 512)):
     return image, label
 
 
-get_images_new = lambda features: get_images(features, (512, 1024))
+if __name__ == "__main__":
+    ds_train = tfds.load(name="cityscapes", split='train', data_dir="/datasets/")
+    ds_train = ds_train.shuffle(100).batch(4)
+    ds_val = tfds.load(name="cityscapes", split='validation', data_dir="/datasets/")
+    ds_val = ds_val.batch(4)
 
-ds_train_new = ds_train.map(get_images_new).repeat()
-ds_val_new = ds_val.map(get_images)
+    get_images_new = lambda features: get_images(features, (512, 1024))
 
-for features in ds_train_new:
-    image, segmentation = features
-    display(image, segmentation)
-cv2.destroyAllWindows()
+    ds_train_new = ds_train.map(get_images_new).repeat()
+    ds_val_new = ds_val.map(get_images)
+
+    for features in ds_train_new:
+        image, segmentation = features
+        # segmentation = tf.one_hot(segmentation[..., 0], depth=19)
+        print(image.shape, segmentation.shape)
+        display(image, segmentation)
+    cv2.destroyAllWindows()

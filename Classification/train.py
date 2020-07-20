@@ -4,6 +4,7 @@ import tensorflow_datasets as tfds
 import losses
 import argparse
 import os
+import tensorflow as tf
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -19,7 +20,7 @@ args.add_argument("--logging_freq", type=int, default=5, help="Add to tfrecords 
 args.add_argument("--batch_size", type=int, default=16, help="Size of mini-batch")
 args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
 args.add_argument("--model", type=str, default="pr_resnet56", help="Select model")
-args.add_argument("--save_dir", type=str, default="", help="Save directory for models and tensorboard")
+args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 parsed = args.parse_args()
 
 dataset_name = parsed.dataset
@@ -31,13 +32,13 @@ lr = parsed.lr
 momentum = parsed.momentum
 model_name = parsed.model
 log_freq = parsed.logging_freq
-logdir = parsed.save_dir + "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}".format(dataset_name, epochs, batch_size,
-                                                                        optimizer_name, lr, model_name)
+logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}".format(dataset_name, epochs, batch_size,
+                                                                        optimizer_name, lr, model_name))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
 
-dataset = tfds.load(dataset_name, data_dir="/tmp/tfds/")
+dataset = tfds.load(dataset_name, data_dir="/datasets/")
 splits = list(dataset.keys())
 dataset_train = dataset['train'] if 'train' in splits else None
 dataset_test = dataset['test'] if 'test' in splits else None
