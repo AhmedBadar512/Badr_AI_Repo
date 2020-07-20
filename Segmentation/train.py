@@ -18,10 +18,13 @@ args.add_argument("--epochs", type=int, default=40, help="Number of epochs to tr
 args.add_argument("--lr", type=float, default=1e-3, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=5, help="Add to tfrecords after this many steps")
-args.add_argument("--batch_size", type=int, default=8, help="Size of mini-batch")
+args.add_argument("--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
 args.add_argument("--model", type=str, default="unet", help="Select model", choices=["unet"])
 args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
+args.add_argument("--shuffle_buffer", type=int, default=10, help="Size of the shuffle buffer")
+args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
+args.add_argument("--height", type=int, default=256, help="Size of the shuffle buffer")
 parsed = args.parse_args()
 
 dataset_name = parsed.dataset
@@ -51,20 +54,24 @@ assert (dataset_test or dataset_validation) is not None, "Either test or validat
 
 total_samples = len(list(dataset_train))
 
-dataset_train = dataset_train.shuffle(1000).batch(batch_size, drop_remainder=True).prefetch(
+dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
 #  TODO: Get dataset shape
-dataset_test = dataset_test.shuffle(1024, ).repeat().shuffle(1024, reshuffle_each_iteration=True).batch(batch_size,
-                                                                                                        drop_remainder=True) \
+dataset_test = dataset_test.shuffle(parsed.shuffle_buffer, ).repeat().shuffle(parsed.shuffle_buffer,
+                                                                              reshuffle_each_iteration=True).batch(
+    batch_size,
+    drop_remainder=True) \
     if (dataset_test is not None) else None
-dataset_validation = dataset_validation.shuffle(1000).batch(batch_size, drop_remainder=True) \
+dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
 
 eval_dataset = dataset_validation if dataset_validation else dataset_test
 
-processed_train = lambda dataset_train: get_images(dataset_train, (512, 1024))
-processed_test = lambda dataset_test: get_images(dataset_test, (512, 1024))
-processed_val = lambda dataset_val: get_images(dataset_val, (512, 1024))
+get_images_new = lambda features: get_images(features, (parsed.height, parsed.width))
+
+processed_train = dataset_train.map(get_images_new)
+processed_test = dataset_test.map(get_images_new)
+processed_val = dataset_validation.map(get_images_new)
 # =========== Optimizer and Training Setup ============ #
 lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
                                                                     [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
@@ -101,7 +108,7 @@ def train_step(input_imgs, labels, model, optim):
 # =========== Training ============ #
 
 
-model = get_model(model_name, n_classes=n_classes)
+model = get_model(model_name, n_classes=n_classes, shp=(parsed.height, parsed.width))
 train_writer = tf.summary.create_file_writer(logdir + "/train")
 val_writer = tf.summary.create_file_writer(logdir + "/validation")
 test_writer = tf.summary.create_file_writer(logdir + "/test")
@@ -113,13 +120,12 @@ manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 # writer.set_as_default()
 step = 0
 for epoch in range(epochs):
-    for step, (mini_batch, val_mini_batch) in enumerate(zip(dataset_train, dataset_test)):
-        train_probs = tf.nn.softmax(model(mini_batch['image'] / 255))
-        train_labs = tf.one_hot(mini_batch['label'], n_classes)
-        val_probs = tf.nn.softmax(model(val_mini_batch['image'] / 255))
-        val_labs = tf.one_hot(val_mini_batch['label'], n_classes)
-
-        loss = train_step(mini_batch['image'] / 255, train_labs, model, optimizer)
+    for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
+        train_probs = tf.nn.softmax(model(mini_batch[0] / 255))
+        train_labs = tf.one_hot(mini_batch[1][..., 0], n_classes)
+        val_probs = tf.nn.softmax(model(val_mini_batch[0] / 255))
+        val_labs = tf.one_hot(val_mini_batch[1][..., 0], n_classes)
+        loss = train_step(mini_batch[0] / 255, train_labs, model, optimizer)
         val_loss = losses.get_loss(val_probs,
                                    val_labs,
                                    name='cross_entropy',
@@ -134,20 +140,20 @@ for epoch in range(epochs):
             with test_writer.as_default():
                 tf.summary.scalar("loss", val_loss,
                                   step=curr_step)
-            for t_metric, v_metric in zip(train_metrics, val_metrics):
-                _, _ = t_metric.update_state(mini_batch['label'], tf.argmax(train_probs, axis=-1)), \
-                       v_metric.update_state(val_mini_batch['label'], tf.argmax(val_probs, axis=-1))
-                with train_writer.as_default():
-                    tf.summary.scalar(t_metric.name, t_metric.result(), curr_step)
-                with test_writer.as_default():
-                    tf.summary.scalar(v_metric.name, v_metric.result(), curr_step)
+            # for t_metric, v_metric in zip(train_metrics, val_metrics):
+            #     _, _ = t_metric.update_state(mini_batch['label'], tf.argmax(train_probs, axis=-1)), \
+            #            v_metric.update_state(val_mini_batch['label'], tf.argmax(val_probs, axis=-1))
+            #     with train_writer.as_default():
+            #         tf.summary.scalar(t_metric.name, t_metric.result(), curr_step)
+            #     with test_writer.as_default():
+            #         tf.summary.scalar(v_metric.name, v_metric.result(), curr_step)
         with train_writer.as_default():
             tmp = lr_scheduler(step=total_steps)
             tf.summary.scalar("Learning Rate", tmp, curr_step)
     total_steps += (step + 1)
-    for t_metric, v_metric in zip(train_metrics, val_metrics):
-        t_metric.reset_states()
-        v_metric.reset_states()
+    # for t_metric, v_metric in zip(train_metrics, val_metrics):
+    #     t_metric.reset_states()
+    #     v_metric.reset_states()
     ckpt.step.assign_add(step + 1)
     if epoch % parsed.save_interval:
         manager.save()
