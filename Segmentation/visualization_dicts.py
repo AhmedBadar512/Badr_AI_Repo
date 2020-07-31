@@ -55,7 +55,7 @@ def get_cityscapes():
     # Note that many IDs are ignored in evaluation and thus you never need to predict these!
 
     labels = [
-        #       name                     id    trainId   category            catId     hasInstances   ignoreInEval   color
+        # name                     id    trainId   category            catId     hasInstances   ignoreInEval   color
         Label('unlabeled', 0, 255, 'void', 0, False, True, (0, 0, 0)),
         Label('ego vehicle', 1, 255, 'void', 0, False, True, (0, 0, 0)),
         Label('rectification border', 2, 255, 'void', 0, False, True, (0, 0, 0)),
