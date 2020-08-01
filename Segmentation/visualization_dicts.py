@@ -90,9 +90,19 @@ def get_cityscapes():
         Label('train', 31, 16, 'vehicle', 7, True, False, (0, 80, 100)),
         Label('motorcycle', 32, 17, 'vehicle', 7, True, False, (0, 0, 230)),
         Label('bicycle', 33, 18, 'vehicle', 7, True, False, (119, 11, 32)),
-        Label('license plate', -1, -1, 'vehicle', 7, False, True, (0, 0, 142)),
+        Label('license plate', -1, -1, 'vehicle', 7, False, True, (255, 234, 142)),
     ]
     return labels
+
+
+def convert_cs_19(segmentation):
+    cs_dict = get_cityscapes()
+    cs_19_map = [tf.where(segmentation == label[1], label[2] + 1, 0)
+                 for label in cs_dict
+                 if (label[2] != 255 and label[2] != -1)]
+    cs_19_map = sum(cs_19_map) - 1
+    cs_19_map = tf.cast(cs_19_map, tf.uint8)
+    return cs_19_map
 
 
 def gpu_cs_labels(segmentation_maps, with_train_ids=True):
@@ -104,11 +114,13 @@ def gpu_cs_labels(segmentation_maps, with_train_ids=True):
         new_img = tf.zeros((segmentation_map.shape[0], segmentation_map.shape[1], 3), tf.uint8)
         color_named_tuple = get_cityscapes()
         for label in color_named_tuple:
-            if label[2] == 255:
-                continue
             if with_train_ids:
+                if label[2] == 255 or label[2] == -1:
+                    continue
                 tmp = [segmentation_map == label[2]] * 3
             else:
+                if label[2] == 255:
+                    continue
                 tmp = [segmentation_map == label[1]] * 3
             tmp = tf.cast(tf.squeeze(tf.stack(tmp, axis=-1)), tf.uint8)
             new_img = new_img + tmp * label[-1]

@@ -14,11 +14,11 @@ physical_devices = tf.config.experimental.list_physical_devices("GPU")
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("--dataset", type=str, default="cityscapes", help="Name a dataset from the tf_dataset collection")
-args.add_argument("--n_classes", type=int, default=32, help="Number of classes")
+args.add_argument("--dataset", type=str, default="cityscapes", help="Name a dataset from the tf_dataset collection", choices=["cityscapes", "cityscapes19"])
+args.add_argument("--n_classes", type=int, default=34, help="Number of classes")
 args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
-args.add_argument("--lr", type=float, default=2.5e-3, help="Initial learning rate")
+args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
 args.add_argument("--batch_size", type=int, default=4, help="Size of mini-batch")
@@ -47,6 +47,11 @@ logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".
 
 # =========== Load Dataset ============ #
 
+if dataset_name=="cityscapes19":
+    cs_19 = True
+    dataset_name = "cityscapes"
+else:
+    cs_19 = False
 dataset = tfds.load(dataset_name, data_dir="/datasets/")
 splits = list(dataset.keys())
 dataset_train = dataset['train'] if 'train' in splits else None
@@ -72,7 +77,7 @@ dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).
 
 eval_dataset = dataset_validation if dataset_validation else dataset_test
 
-get_images_new = lambda features: get_images(features, (parsed.height, parsed.width))
+get_images_new = lambda features: get_images(features, (parsed.height, parsed.width), cs_19)
 
 processed_train = dataset_train.map(get_images_new)
 processed_test = dataset_test.map(get_images_new)
@@ -81,7 +86,7 @@ processed_val = dataset_validation.map(get_images_new)
 # lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
 #                                                                     [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
 lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(initial_learning_rate=lr, decay_steps=1e6,
-                                                             end_learning_rate=1e-6, power=0.9)
+                                                             end_learning_rate=1e-8, power=0.9)
 if optimizer_name == "Adam":
     optimizer = K.optimizers.Adam(learning_rate=lr_scheduler)
 elif optimizer_name == "RMSProp":
@@ -145,13 +150,13 @@ for epoch in range(epochs):
             with train_writer.as_default():
                 tf.summary.scalar("loss", loss,
                                   step=curr_step)
-                tf.summary.image("pred", gpu_cs_labels(tf.argmax(train_probs, axis=-1), False), step=curr_step)
-                tf.summary.image("gt", gpu_cs_labels(mini_batch[1][..., tf.newaxis], False), step=curr_step)
+                tf.summary.image("pred", gpu_cs_labels(tf.argmax(train_probs, axis=-1), cs_19), step=curr_step)
+                tf.summary.image("gt", gpu_cs_labels(mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
             with test_writer.as_default():
                 tf.summary.scalar("loss", val_loss,
                                   step=curr_step)
-                tf.summary.image("val_pred", gpu_cs_labels(tf.argmax(val_probs, axis=-1), False), step=curr_step)
-                tf.summary.image("val_gt", gpu_cs_labels(val_mini_batch[1][..., tf.newaxis], False), step=curr_step)
+                tf.summary.image("val_pred", gpu_cs_labels(tf.argmax(val_probs, axis=-1), cs_19), step=curr_step)
+                tf.summary.image("val_gt", gpu_cs_labels(val_mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
             # for t_metric, v_metric in zip(train_metrics, val_metrics):
             #     _, _ = t_metric.update_state(mini_batch['label'], tf.argmax(train_probs, axis=-1)), \
             #            v_metric.update_state(val_mini_batch['label'], tf.argmax(val_probs, axis=-1))
