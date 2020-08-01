@@ -5,8 +5,10 @@ import losses
 import argparse
 import os
 import tensorflow as tf
+import datetime
 from citys_visualizer import get_images
 from visualization_dicts import gpu_cs_labels
+import string
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -37,8 +39,10 @@ lr = parsed.lr
 momentum = parsed.momentum
 model_name = parsed.model
 log_freq = parsed.logging_freq
-logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                    optimizer_name, lr, model_name))
+time = str(datetime.datetime.now())
+time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
+logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
+                                                                                    optimizer_name, lr, model_name, time))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
