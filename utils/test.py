@@ -31,7 +31,7 @@ for img_path, label_path, instance_path, color_path in zip(img_paths, label_path
     inst_ex = cv2.imread(str(instance_path), cv2.IMREAD_UNCHANGED)
     id_label = cv2.imread(str(label_path), cv2.IMREAD_UNCHANGED)
     color_label = cv2.imread(str(color_path), cv2.IMREAD_UNCHANGED)
-    onehot_label = tf.one_hot(id_label, depth=31, axis=-1)
+    onehot_label = tf.one_hot(id_label, depth=34, axis=-1)
     for x in range(onehot_label.shape[-1]):
         print(onehot_label[..., 0].shape)
     cv2.imshow("label", color_label)

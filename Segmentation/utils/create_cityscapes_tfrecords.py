@@ -56,30 +56,27 @@ class TFRecordsSeg:
 
         return tf.train.Example(features=tf.train.Features(feature=feature))
 
+    def return_inst_cnts(self, inst_ex):
+        inst_cnt = np.zeros(inst_ex.shape)
+        for unique_class in np.unique(inst_ex):
+            inst_img = (inst_ex == unique_class) / 1
+            cnts, _ = cv2.findContours(inst_img.astype("uint8"), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+            inst_cnt = cv2.drawContours(inst_cnt, cnts, -1, (1., 1., 1.), thickness=1)
+        return inst_cnt
+
     def write_tfrecords(self):
         img_paths = sorted(pathlib.Path(self.image_dir).rglob("*leftImg8bit.png"))
         instance_paths = sorted(pathlib.Path(self.labels_dir).rglob("*instanceIds.png"))
         label_paths = sorted(pathlib.Path(self.labels_dir).rglob("*labelIds.png"))
-        cv2.namedWindow("label", 0)
-        cv2.namedWindow("final_blobs", 0)
-        cv2.namedWindow("inst_cnts", 0)
-        cv2.namedWindow("bnd_processed", 0)
-        for img_path, label_path, instance_path in zip(img_paths, label_paths, instance_paths):
-            inst_ex = cv2.imread(str(instance_path), cv2.IMREAD_UNCHANGED)
-            id_label = cv2.imread(str(label_path), cv2.IMREAD_UNCHANGED)
-            cv2.imshow("label", id_label)
-            final_blobs = tfa.image.connected_components(id_label)
-            inst_cnt = self.return_inst_cnts(inst_ex)
-            visual = final_blobs / tf.math.reduce_max(final_blobs)
-            cv2.imshow("final_blobs", visual.numpy())
-            cv2.imshow("inst_cnts", inst_cnt)
-            cv2.imshow("bnd_processed", (1 - inst_cnt) * id_label)
-            cv2.waitKey()
-        # with tf.io.TFRecordWriter(self.tfrecord_path) as writer:
-        #     for img_path, label in zip(img_paths, label_paths, instance_paths):
-        #         img_string = open(str(img_path), 'rb').read()
-        #         tf_example = self.image_example(img_string, label.encode())
-        #         writer.write(tf_example.SerializeToString())
+        color_paths = sorted(pathlib.Path(self.labels_dir).rglob("*color.png"))
+        with tf.io.TFRecordWriter(self.tfrecord_path) as writer:
+            for img_path, label_path, instance_path, color_path in zip(img_paths, label_paths, instance_paths,
+                                                                       color_paths):
+                img_string = open(str(img_path), 'rb').read()
+                label_string = open(str(label_path), 'rb').read()
+                instance_string = open(str(instance_path), 'rb').read()
+                tf_example = self.image_example(img_string, label_string, instance_string)
+                writer.write(tf_example.SerializeToString())
 
     @staticmethod
     def return_inst_cnts(inst_ex):
@@ -107,8 +104,25 @@ class TFRecordsSeg:
         return decoded_dataset
 
 
-example = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="./", split='val')
-example.write_tfrecords()
+# train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/train.tfrecords", split='train')
+# val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/val.tfrecords", split='val')
+# train.write_tfrecords()
+# val.write_tfrecords()
+# example = TFRecordsSeg(data_dir="", tfrecord_path="./test.tfrecords", split='val')
+# image_dataset = example.read_tfrecords().repeat(10)
+# cv2.namedWindow("img", 0)
+# cv2.namedWindow("label", 0)
+# cv2.namedWindow("insts", 0)
+# for image_features in image_dataset:
+#     img = image_features[0][..., ::-1]
+#     label = image_features[1]
+#     insts = image_features[2]
+#     cv2.imshow("img", img.numpy())
+#     cv2.imshow("label", label.numpy()/34)
+#     cv2.imshow("insts", insts.numpy())
+#     cv2.waitKey()
+#
+#     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
 # example.write_tfrecords()
 # image_dataset = example.read_tfrecords().shuffle(10000)
 #
