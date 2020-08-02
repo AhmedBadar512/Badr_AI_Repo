@@ -78,9 +78,9 @@ if __name__ == "__main__":
     cs_19 = True
     # process = lambda features: get_images_custom(features, shp=(512, 1024), cs_19=cs_19)
     if custom:
-        process = lambda *features: get_images_custom(features, shp=None, cs_19=cs_19)
+        process = lambda *features: get_images_custom(features, shp=(256, 512), cs_19=cs_19)
     else:
-        process = lambda features: get_images(features, shp=None, cs_19=cs_19)
+        process = lambda features: get_images(features, shp=(256, 512), cs_19=cs_19)
 
     ds_train_new = ds_train.map(process).repeat()
     # ds_val_new = ds_val.map(get_images_custom)
