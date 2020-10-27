@@ -11,7 +11,7 @@ from visualization_dicts import gpu_cs_labels
 import string
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
+print("Physical_Devices: {}".format(physical_devices))
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("--dataset", type=str, default="cityscapes", help="Name a dataset from the tf_dataset collection", choices=["cityscapes", "cityscapes19"])
@@ -143,8 +143,7 @@ for epoch in range(epochs):
                                    val_labs,
                                    name='cross_entropy',
                                    from_logits=False)
-        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(),
-                                                              val_loss.numpy()), end='     \r', flush=True)
+        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(), val_loss.numpy()))
         curr_step = total_steps + step
         if curr_step % log_freq == 0:
             with train_writer.as_default():

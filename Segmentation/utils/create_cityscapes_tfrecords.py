@@ -5,10 +5,11 @@ import cv2
 from PIL import Image
 import numpy as np
 import tensorflow_addons as tfa
-
+import argparse
+import tqdm
 
 class TFRecordsSeg:
-    def __init__(self, data_dir="/datasets/custom/cityscapes", tfrecord_path="data.tfrecords", split='train'):
+    def __init__(self, data_dir="/datasets/custom/cityscapes", tfrecord_path="data.tfrecords", split='train', classes=34):
         """
         :param data_dir: the path to iam directory containing the subdirectories of xml and lines from iam dataset
         :param tfrecord_path:
@@ -19,6 +20,7 @@ class TFRecordsSeg:
         self.image_dir = os.path.join(data_dir, "leftImg8bit/{}".format(split))
         self.tfrecord_path = tfrecord_path
         self.labels = []
+        self.classes = classes
         self.image_feature_description = \
             {
                 'label': tf.io.FixedLenFeature([], tf.string),
@@ -70,8 +72,8 @@ class TFRecordsSeg:
         label_paths = sorted(pathlib.Path(self.labels_dir).rglob("*labelIds.png"))
         color_paths = sorted(pathlib.Path(self.labels_dir).rglob("*color.png"))
         with tf.io.TFRecordWriter(self.tfrecord_path) as writer:
-            for img_path, label_path, instance_path, color_path in zip(img_paths, label_paths, instance_paths,
-                                                                       color_paths):
+            for img_path, label_path, instance_path, color_path in tqdm.tqdm(zip(img_paths, label_paths, instance_paths,
+                                                                                 color_paths)):
                 img_string = open(str(img_path), 'rb').read()
                 label_string = open(str(label_path), 'rb').read()
                 instance_string = open(str(instance_path), 'rb').read()
@@ -90,6 +92,7 @@ class TFRecordsSeg:
     def decode_strings(self, record):
         images = tf.io.decode_jpeg(record['image'], 3)
         labels = tf.io.decode_jpeg(record['label'], 3)
+        labels = tf.where
         instance_labels = tf.io.decode_jpeg(record['instance_labels'], 3)
         return images, labels, instance_labels
 
@@ -104,27 +107,30 @@ class TFRecordsSeg:
         return decoded_dataset
 
 
-# train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/train.tfrecords", split='train')
-# val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/val.tfrecords", split='val')
-# train.write_tfrecords()
-# val.write_tfrecords()
-# example = TFRecordsSeg(data_dir="", tfrecord_path="./test.tfrecords", split='val')
-# image_dataset = example.read_tfrecords().repeat(10)
-# cv2.namedWindow("img", 0)
-# cv2.namedWindow("label", 0)
-# cv2.namedWindow("insts", 0)
-# for image_features in image_dataset:
-#     img = image_features[0][..., ::-1]
-#     label = image_features[1]
-#     insts = image_features[2]
-#     cv2.imshow("img", img.numpy())
-#     cv2.imshow("label", label.numpy()/34)
-#     cv2.imshow("insts", insts.numpy())
-#     cv2.waitKey()
-#
-#     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
-# example.write_tfrecords()
-# image_dataset = example.read_tfrecords().shuffle(10000)
-#
-# for image_features in image_dataset.take(10):
-#     print(image_features[0].shape, image_features[1].numpy())
+if __name__ == "__main__":
+    classes = 32
+    train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train', classes=classes)
+    # train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/train.tfrecords", split='train')
+    # val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/val.tfrecords", split='val')
+    #     train.write_tfrecords()
+    # val.write_tfrecords()
+    example = train
+    image_dataset = example.read_tfrecords().repeat(10)
+    cv2.namedWindow("img", 0)
+    cv2.namedWindow("label", 0)
+    cv2.namedWindow("insts", 0)
+    for image_features in image_dataset:
+        img = image_features[0][..., ::-1]
+        label = image_features[1]
+        insts = image_features[2]
+        cv2.imshow("img", img.numpy())
+        cv2.imshow("label", label.numpy()/classes)
+        cv2.imshow("insts", insts.numpy())
+        cv2.waitKey()
+
+    #     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
+    # example.write_tfrecords()
+    # image_dataset = example.read_tfrecords().shuffle(10000)
+    #
+    # for image_features in image_dataset.take(10):
+    #     print(image_features[0].shape, image_features[1].numpy())
