@@ -403,7 +403,7 @@ class BiSeNet(tf.keras.Model):
         assert is_channels_first(self.data_format) or ((x.shape[1] % 32 == 0) and (x.shape[2] % 32 == 0))
         assert (not is_channels_first(self.data_format)) or ((x.shape[2] % 32 == 0) and (x.shape[3] % 32 == 0))
 
-        x8, x16, x32 = self.backbone(x, training=training)
+        x4, x8, x16, x32 = self.backbone(x, training=training)
         z8, y8, y16 = self.pool(x8, x16, x32, training=training)
 
         z8 = self.head_z8(z8, training=training)

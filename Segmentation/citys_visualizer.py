@@ -63,11 +63,11 @@ def get_images_custom(features, shp=(256, 512), cs_19=True):
 if __name__ == "__main__":
     from utils.create_cityscapes_tfrecords import TFRecordsSeg
     # ds_train = tfds.load(name="cityscapes", split='train', data_dir="/datasets/")
-    custom = False
+    custom = True
     if custom:
-        ds_train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/train.tfrecords",
+        ds_train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/train.tfrecords",
                                 split='train').read_tfrecords()
-        ds_val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/val.tfrecords",
+        ds_val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/val.tfrecords",
                                 split='val').read_tfrecords()
     else:
         ds_train = tfds.load(name="cityscapes", split='train', data_dir="/datasets/")

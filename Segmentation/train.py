@@ -6,15 +6,19 @@ import argparse
 import os
 import tensorflow as tf
 import datetime
-from citys_visualizer import get_images
+from citys_visualizer import get_images_custom
 from visualization_dicts import gpu_cs_labels
+from utils.create_cityscapes_tfrecords import TFRecordsSeg
 import string
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+tf.config.experimental.set_memory_growth(physical_devices[1], True)
 print("Physical_Devices: {}".format(physical_devices))
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("--dataset", type=str, default="cityscapes", help="Name a dataset from the tf_dataset collection", choices=["cityscapes", "cityscapes19"])
+args.add_argument("--dataset", type=str, default="cityscapes19", help="Name a dataset from the tf_dataset collection",
+                  choices=["cityscapes", "cityscapes19"])
 args.add_argument("--n_classes", type=int, default=34, help="Number of classes")
 args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
@@ -42,45 +46,41 @@ log_freq = parsed.logging_freq
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
 logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                    optimizer_name, lr, model_name, time))
+                                                                                       optimizer_name, lr, model_name,
+                                                                                       time))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
 
-if dataset_name=="cityscapes19":
+if dataset_name == "cityscapes19":
     cs_19 = True
     dataset_name = "cityscapes"
 else:
     cs_19 = False
-dataset = tfds.load(dataset_name, data_dir="/datasets/")
-splits = list(dataset.keys())
-dataset_train = dataset['train'] if 'train' in splits else None
-dataset_test = dataset['test'] if 'test' in splits else None
-dataset_validation = dataset['validation'] if 'validation' in splits else None
+
+dataset_train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/train.tfrecords",
+                             split='train').read_tfrecords()
+dataset_validation = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/val.tfrecords",
+                                  split='val').read_tfrecords()
+# dataset_test = None
 
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
-assert (dataset_test or dataset_validation) is not None, "Either test or validation dataset should not be None"
+assert dataset_validation is not None, "Either test or validation dataset should not be None"
 
 total_samples = len(list(dataset_train))
 
 dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
 #  TODO: Get dataset shape
-dataset_test = dataset_test.shuffle(parsed.shuffle_buffer, ).repeat().shuffle(parsed.shuffle_buffer,
-                                                                              reshuffle_each_iteration=True).batch(
-    batch_size,
-    drop_remainder=True) \
-    if (dataset_test is not None) else None
 dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
 
-eval_dataset = dataset_validation if dataset_validation else dataset_test
+eval_dataset = dataset_validation
 
-get_images_new = lambda features: get_images(features, (parsed.height, parsed.width), cs_19)
+get_images_new = lambda *features: get_images_custom(features, (parsed.height, parsed.width), cs_19)
 
 processed_train = dataset_train.map(get_images_new)
-processed_test = dataset_test.map(get_images_new)
 processed_val = dataset_validation.map(get_images_new)
 # =========== Optimizer and Training Setup ============ #
 # lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
@@ -134,8 +134,9 @@ manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 step = 0
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
-        train_probs = tf.nn.softmax(model(mini_batch[0])/255)
-        val_probs = tf.nn.softmax(model(val_mini_batch[0])/255)
+        tmp = model(mini_batch[0])
+        train_probs = tf.nn.softmax(tmp / 255)
+        val_probs = tf.nn.softmax(model(val_mini_batch[0]) / 255)
         train_labs = tf.one_hot(mini_batch[1][..., 0], n_classes)
         val_labs = tf.one_hot(val_mini_batch[1][..., 0], n_classes)
         loss = train_step(mini_batch[0], train_labs, model, optimizer)
@@ -143,7 +144,8 @@ for epoch in range(epochs):
                                    val_labs,
                                    name='cross_entropy',
                                    from_logits=False)
-        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(), val_loss.numpy()))
+        print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(),
+                                                              val_loss.numpy()))
         curr_step = total_steps + step
         if curr_step % log_freq == 0:
             with train_writer.as_default():

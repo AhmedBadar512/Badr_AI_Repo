@@ -92,7 +92,6 @@ class TFRecordsSeg:
     def decode_strings(self, record):
         images = tf.io.decode_jpeg(record['image'], 3)
         labels = tf.io.decode_jpeg(record['label'], 3)
-        labels = tf.where
         instance_labels = tf.io.decode_jpeg(record['instance_labels'], 3)
         return images, labels, instance_labels
 
@@ -110,9 +109,9 @@ class TFRecordsSeg:
 if __name__ == "__main__":
     classes = 32
     train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train', classes=classes)
-    # train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/train.tfrecords", split='train')
-    # val = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/datasets/custom/val.tfrecords", split='val')
-    #     train.write_tfrecords()
+    # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
+    # val = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/val.tfrecords", split='val')
+    # train.write_tfrecords()
     # val.write_tfrecords()
     example = train
     image_dataset = example.read_tfrecords().repeat(10)
@@ -122,6 +121,7 @@ if __name__ == "__main__":
     for image_features in image_dataset:
         img = image_features[0][..., ::-1]
         label = image_features[1]
+        print(np.unique(label.numpy()))
         insts = image_features[2]
         cv2.imshow("img", img.numpy())
         cv2.imshow("label", label.numpy()/classes)
