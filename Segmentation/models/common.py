@@ -8,9 +8,9 @@ __all__ = ['is_channels_first', 'get_channel_axis', 'round_channels', 'get_im_si
            'conv3x3', 'depthwise_conv3x3', 'ConvBlock', 'conv1x1_block', 'conv3x3_block', 'conv5x5_block',
            'conv7x7_block', 'dwconv_block', 'dwconv3x3_block', 'dwconv5x5_block', 'dwsconv3x3_block', 'PreConvBlock',
            'pre_conv1x1_block', 'pre_conv3x3_block', 'DeconvBlock', 'ChannelShuffle', 'ChannelShuffle2', 'SEBlock',
-           'PixelShuffle', 'DucBlock', 'Identity', 'SimpleSequential', 'ParametricSequential', 'DualPathSequential',
-           'Concurrent', 'SequentialConcurrent', 'ParametricConcurrent', 'MultiOutputSequential', 'ParallelConcurent',
-           'InterpolationBlock', 'Hourglass', 'HeatmapMaxDetBlock']
+           'SABlock', 'SAConvBlock', 'saconv3x3_block', 'PixelShuffle', 'DucBlock', 'Identity', 'SimpleSequential',
+           'ParametricSequential', 'DualPathSequential', 'Concurrent', 'SequentialConcurrent', 'ParametricConcurrent',
+           'MultiOutputSequential', 'ParallelConcurent', 'InterpolationBlock', 'Hourglass', 'HeatmapMaxDetBlock']
 
 import math
 from inspect import isfunction
@@ -25,10 +25,12 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 def is_channels_first(data_format):
     """
     Is tested data format channels first.
+
     Parameters:
     ----------
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
+
     Returns
     -------
     bool
@@ -40,10 +42,12 @@ def is_channels_first(data_format):
 def get_channel_axis(data_format):
     """
     Get channel axis.
+
     Parameters:
     ----------
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
+
     Returns
     -------
     int
@@ -56,12 +60,14 @@ def round_channels(channels,
                    divisor=8):
     """
     Round weighted channel number (make divisible operation).
+
     Parameters:
     ----------
     channels : int or float
         Original number of channels.
     divisor : int, default 8
         Alignment value.
+
     Returns
     -------
     int
@@ -77,12 +83,14 @@ def get_im_size(x,
                 data_format):
     """
     Get spatial size for a tensor.
+
     Parameters:
     ----------
     x : tensor
         A tensor.
     data_format : str
         The ordering of the dimensions in the tensor.
+
     Returns
     -------
     (int, int)
@@ -98,6 +106,7 @@ def interpolate_im(x,
                    data_format="channels_last"):
     """
     Bilinear change spatial size for a tensor.
+
     Parameters:
     ----------
     x : tensor
@@ -108,6 +117,7 @@ def interpolate_im(x,
         Spatial size of the output tensor for the bilinear upsampling operation.
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
+
     Returns
     -------
     tensor
@@ -130,7 +140,6 @@ class ReLU6(nn.Layer):
     """
     ReLU6 activation layer.
     """
-
     def __init__(self, **kwargs):
         super(ReLU6, self).__init__(**kwargs)
 
@@ -142,7 +151,6 @@ class Swish(nn.Layer):
     """
     Swish activation function from 'Searching for Activation Functions,' https://arxiv.org/abs/1710.05941.
     """
-
     def call(self, x):
         return x * tf.nn.sigmoid(x)
 
@@ -152,7 +160,6 @@ class HSigmoid(nn.Layer):
     Approximated sigmoid function, so-called hard-version of sigmoid from 'Searching for MobileNetV3,'
     https://arxiv.org/abs/1905.02244.
     """
-
     def __init__(self, **kwargs):
         super(HSigmoid, self).__init__(**kwargs)
 
@@ -164,7 +171,6 @@ class HSwish(nn.Layer):
     """
     H-Swish activation function from 'Searching for MobileNetV3,' https://arxiv.org/abs/1905.02244.
     """
-
     def __init__(self, **kwargs):
         super(HSwish, self).__init__(**kwargs)
 
@@ -175,6 +181,7 @@ class HSwish(nn.Layer):
 class PReLU2(nn.PReLU):
     """
     Parametric leaky version of a Rectified Linear Unit (with wide alpha).
+
     Parameters:
     ----------
     in_channels : int
@@ -186,7 +193,6 @@ class PReLU2(nn.PReLU):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels=1,
                  alpha_initializer=tf.constant_initializer(0.25),
@@ -220,7 +226,6 @@ class Tanh(nn.Layer):
     """
     Tanh activation function.
     """
-
     def __init__(self, **kwargs):
         super(Tanh, self).__init__(**kwargs)
 
@@ -232,10 +237,12 @@ def get_activation_layer(activation,
                          **kwargs):
     """
     Create activation layer from string/function.
+
     Parameters:
     ----------
     activation : function, or str, or nn.Layer
         Activation function or name of activation function.
+
     Returns
     -------
     nn.Layer
@@ -272,12 +279,14 @@ def flatten(x,
             data_format):
     """
     Flattens the input to two dimensional.
+
     Parameters:
     ----------
     x : Tensor
         Input tensor.
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
+
     Returns
     -------
     Tensor
@@ -292,6 +301,7 @@ def flatten(x,
 class MaxPool2d(nn.Layer):
     """
     Max pooling operation for two dimensional (spatial) data.
+
     Parameters:
     ----------
     pool_size : int or tuple/list of 2 int
@@ -305,7 +315,6 @@ class MaxPool2d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  pool_size,
                  strides,
@@ -374,6 +383,7 @@ class MaxPool2d(nn.Layer):
 class AvgPool2d(nn.Layer):
     """
     Average pooling operation for two dimensional (spatial) data.
+
     Parameters:
     ----------
     pool_size : int or tuple/list of 2 int
@@ -387,7 +397,6 @@ class AvgPool2d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  pool_size,
                  strides,
@@ -466,12 +475,12 @@ class AvgPool2d(nn.Layer):
 class GlobalAvgPool2d(nn.GlobalAvgPool2D):
     """
     Global average pooling.
+
     Parameters:
     ----------
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  data_format="channels_last",
                  **kwargs):
@@ -487,6 +496,7 @@ class GlobalAvgPool2d(nn.GlobalAvgPool2D):
 class BatchNorm(nn.BatchNormalization):
     """
     MXNet/Gluon-like batch normalization.
+
     Parameters:
     ----------
     momentum : float, default 0.9
@@ -496,7 +506,6 @@ class BatchNorm(nn.BatchNormalization):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  momentum=0.9,
                  epsilon=1e-5,
@@ -513,6 +522,7 @@ class InstanceNorm(nn.Layer):
     """
     MXNet/Gluon-like instance normalization layer as in 'Instance Normalization: The Missing Ingredient for Fast
     Stylization' (https://arxiv.org/abs/1607.08022). On the base of `tensorflow_addons` implementation.
+
     Parameters:
     ----------
     epsilon : float, default 1e-5
@@ -536,7 +546,6 @@ class InstanceNorm(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  epsilon=1e-5,
                  center=True,
@@ -704,6 +713,7 @@ class IBN(nn.Layer):
     """
     Instance-Batch Normalization block from 'Two at Once: Enhancing Learning and Generalization Capacities via IBN-Net,'
     https://arxiv.org/abs/1807.09441.
+
     Parameters:
     ----------
     channels : int
@@ -715,7 +725,6 @@ class IBN(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  channels,
                  first_fraction=0.5,
@@ -762,6 +771,7 @@ class IBN(nn.Layer):
 class Conv1d(nn.Layer):
     """
     Standard 1D convolution layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -785,7 +795,6 @@ class Conv1d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -832,6 +841,7 @@ class Conv1d(nn.Layer):
 class Conv2d(nn.Layer):
     """
     Standard convolution layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -855,7 +865,6 @@ class Conv2d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -985,6 +994,7 @@ class Conv2d(nn.Layer):
 class SelectableDense(nn.Layer):
     """
     Selectable dense layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -1000,7 +1010,6 @@ class SelectableDense(nn.Layer):
     num_options : int, default 1
         Number of selectable options.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1077,6 +1086,7 @@ class SelectableDense(nn.Layer):
 class DenseBlock(nn.Layer):
     """
     Standard dense block with Batch normalization and activation.
+
     Parameters:
     ----------
     in_channels : int
@@ -1094,7 +1104,6 @@ class DenseBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1133,6 +1142,7 @@ class DenseBlock(nn.Layer):
 class ConvBlock1d(nn.Layer):
     """
     Standard 1D convolution block with Batch normalization and activation.
+
     Parameters:
     ----------
     in_channels : int
@@ -1162,7 +1172,6 @@ class ConvBlock1d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1221,6 +1230,7 @@ def conv1x1(in_channels,
             **kwargs):
     """
     Convolution 1x1 layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -1258,6 +1268,7 @@ def conv3x3(in_channels,
             **kwargs):
     """
     Convolution 3x3 layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -1296,6 +1307,7 @@ def depthwise_conv3x3(channels,
                       **kwargs):
     """
     Depthwise convolution 3x3 layer.
+
     Parameters:
     ----------
     channels : int
@@ -1320,6 +1332,7 @@ def depthwise_conv3x3(channels,
 class ConvBlock(nn.Layer):
     """
     Standard convolution block with Batch normalization and activation.
+
     Parameters:
     ----------
     in_channels : int
@@ -1349,7 +1362,6 @@ class ConvBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1411,6 +1423,7 @@ def conv1x1_block(in_channels,
                   **kwargs):
     """
     1x1 version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1461,6 +1474,7 @@ def conv3x3_block(in_channels,
                   **kwargs):
     """
     3x3 version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1515,6 +1529,7 @@ def conv5x5_block(in_channels,
                   **kwargs):
     """
     5x5 version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1565,6 +1580,7 @@ def conv7x7_block(in_channels,
                   **kwargs):
     """
     7x7 version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1614,6 +1630,7 @@ def dwconv_block(in_channels,
                  **kwargs):
     """
     Depthwise version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1667,6 +1684,7 @@ def dwconv3x3_block(in_channels,
                     **kwargs):
     """
     3x3 depthwise version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1714,6 +1732,7 @@ def dwconv5x5_block(in_channels,
                     **kwargs):
     """
     5x5 depthwise version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1752,6 +1771,7 @@ def dwconv5x5_block(in_channels,
 class DwsConvBlock(nn.Layer):
     """
     Depthwise separable convolution block with BatchNorms and activations at each convolution layers.
+
     Parameters:
     ----------
     in_channels : int
@@ -1772,8 +1792,10 @@ class DwsConvBlock(nn.Layer):
         Whether to forcibly set `same` padding in depthwise convolution block.
     pw_force_same : bool, default False
         Whether to forcibly set `same` padding in pointwise convolution block.
-    use_bn : bool, default True
-        Whether to use BatchNorm layer.
+    dw_use_bn : bool, default True
+        Whether to use BatchNorm layer (depthwise convolution block).
+    pw_use_bn : bool, default True
+        Whether to use BatchNorm layer (pointwise convolution block).
     bn_eps : float, default 1e-5
         Small float added to variance in Batch norm.
     dw_activation : function or str or None, default 'relu'
@@ -1783,7 +1805,6 @@ class DwsConvBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1794,7 +1815,8 @@ class DwsConvBlock(nn.Layer):
                  use_bias=False,
                  dw_force_same=False,
                  pw_force_same=False,
-                 use_bn=True,
+                 dw_use_bn=True,
+                 pw_use_bn=True,
                  bn_eps=1e-5,
                  dw_activation="relu",
                  pw_activation="relu",
@@ -1810,7 +1832,7 @@ class DwsConvBlock(nn.Layer):
             dilation=dilation,
             use_bias=use_bias,
             force_same=dw_force_same,
-            use_bn=use_bn,
+            use_bn=dw_use_bn,
             bn_eps=bn_eps,
             activation=dw_activation,
             data_format=data_format,
@@ -1820,7 +1842,7 @@ class DwsConvBlock(nn.Layer):
             out_channels=out_channels,
             use_bias=use_bias,
             force_same=pw_force_same,
-            use_bn=use_bn,
+            use_bn=pw_use_bn,
             bn_eps=bn_eps,
             activation=pw_activation,
             data_format=data_format,
@@ -1838,7 +1860,6 @@ def dwsconv3x3_block(in_channels,
                      padding=1,
                      dilation=1,
                      use_bias=False,
-                     use_bn=True,
                      bn_eps=1e-5,
                      dw_activation="relu",
                      pw_activation="relu",
@@ -1846,6 +1867,7 @@ def dwsconv3x3_block(in_channels,
                      **kwargs):
     """
     3x3 depthwise separable version of the standard convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -1858,8 +1880,6 @@ def dwsconv3x3_block(in_channels,
         Padding value for convolution layer.
     dilation : int or tuple/list of 2 int, default 1
         Dilation value for convolution layer.
-    use_bias : bool, default False
-        Whether the layer uses a bias vector.
     bn_eps : float, default 1e-5
         Small float added to variance in Batch norm.
     dw_activation : function or str or None, default 'relu'
@@ -1877,7 +1897,6 @@ def dwsconv3x3_block(in_channels,
         padding=padding,
         dilation=dilation,
         use_bias=use_bias,
-        use_bn=use_bn,
         bn_eps=bn_eps,
         dw_activation=dw_activation,
         pw_activation=pw_activation,
@@ -1888,6 +1907,7 @@ def dwsconv3x3_block(in_channels,
 class PreConvBlock(nn.Layer):
     """
     Convolution block with Batch normalization and ReLU pre-activation.
+
     Parameters:
     ----------
     in_channels : int
@@ -1915,7 +1935,6 @@ class PreConvBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -1978,6 +1997,7 @@ def pre_conv1x1_block(in_channels,
                       **kwargs):
     """
     1x1 version of the pre-activated convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -2025,6 +2045,7 @@ def pre_conv3x3_block(in_channels,
                       **kwargs):
     """
     3x3 version of the pre-activated convolution block.
+
     Parameters:
     ----------
     in_channels : int
@@ -2069,6 +2090,7 @@ def pre_conv3x3_block(in_channels,
 class Deconv2d(nn.Layer):
     """
     Standard deconvolution layer.
+
     Parameters:
     ----------
     in_channels : int
@@ -2092,7 +2114,6 @@ class Deconv2d(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -2141,6 +2162,7 @@ class Deconv2d(nn.Layer):
 class DeconvBlock(nn.Layer):
     """
     Deconvolution block with batch normalization and activation.
+
     Parameters:
     ----------
     in_channels : int
@@ -2170,7 +2192,6 @@ class DeconvBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -2226,6 +2247,7 @@ def channel_shuffle(x,
     """
     Channel shuffle operation from 'ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile Devices,'
     https://arxiv.org/abs/1707.01083.
+
     Parameters:
     ----------
     x : Tensor
@@ -2234,6 +2256,7 @@ def channel_shuffle(x,
         Number of groups.
     data_format : str
         The ordering of the dimensions in tensors.
+
     Returns
     -------
     Tensor
@@ -2266,6 +2289,7 @@ def channel_shuffle(x,
 class ChannelShuffle(nn.Layer):
     """
     Channel shuffle layer. This is a wrapper over the same operation. It is designed to save the number of groups.
+
     Parameters:
     ----------
     channels : int
@@ -2275,7 +2299,6 @@ class ChannelShuffle(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  channels,
                  groups,
@@ -2297,6 +2320,7 @@ def channel_shuffle2(x,
     Channel shuffle operation from 'ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile Devices,'
     https://arxiv.org/abs/1707.01083.
     The alternative version.
+
     Parameters:
     ----------
     x : Tensor
@@ -2305,6 +2329,7 @@ def channel_shuffle2(x,
         Number of groups.
     data_format : str
         Number of channels per group.
+
     Returns
     -------
     keras.Tensor
@@ -2338,6 +2363,7 @@ class ChannelShuffle2(nn.Layer):
     """
     Channel shuffle layer. This is a wrapper over the same operation. It is designed to save the number of groups.
     The alternative version.
+
     Parameters:
     ----------
     channels : int
@@ -2347,7 +2373,6 @@ class ChannelShuffle2(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  channels,
                  groups,
@@ -2365,6 +2390,7 @@ class ChannelShuffle2(nn.Layer):
 class SEBlock(nn.Layer):
     """
     Squeeze-and-Excitation block from 'Squeeze-and-Excitation Networks,' https://arxiv.org/abs/1709.01507.
+
     Parameters:
     ----------
     channels : int
@@ -2382,7 +2408,6 @@ class SEBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  channels,
                  reduction=16,
@@ -2443,10 +2468,247 @@ class SEBlock(nn.Layer):
         return x
 
 
+class SABlock(nn.Layer):
+    """
+    Split-Attention block from 'ResNeSt: Split-Attention Networks,' https://arxiv.org/abs/2004.08955.
+
+    Parameters:
+    ----------
+    out_channels : int
+        Number of output channels.
+    groups : int
+        Number of channel groups (cardinality, without radix).
+    radix : int
+        Number of splits within a cardinal group.
+    reduction : int, default 4
+        Squeeze reduction value.
+    min_channels : int, default 32
+        Minimal number of squeezed channels.
+    use_conv : bool, default True
+        Whether to convolutional layers instead of fully-connected ones.
+    bn_eps : float, default 1e-5
+        Small float added to variance in Batch norm.
+    data_format : str, default 'channels_last'
+        The ordering of the dimensions in tensors.
+    """
+    def __init__(self,
+                 out_channels,
+                 groups,
+                 radix,
+                 reduction=4,
+                 min_channels=32,
+                 use_conv=True,
+                 bn_eps=1e-5,
+                 data_format="channels_last",
+                 **kwargs):
+        super(SABlock, self).__init__(**kwargs)
+        self.groups = groups
+        self.radix = radix
+        self.use_conv = use_conv
+        self.data_format = data_format
+        self.axis = get_channel_axis(data_format)
+        in_channels = out_channels * radix
+        mid_channels = max(in_channels // reduction, min_channels)
+
+        self.pool = nn.GlobalAveragePooling2D(
+            data_format=data_format,
+            name="pool")
+        if use_conv:
+            self.conv1 = conv1x1(
+                in_channels=out_channels,
+                out_channels=mid_channels,
+                use_bias=True,
+                data_format=data_format,
+                name="conv1")
+        else:
+            self.fc1 = nn.Dense(
+                units=mid_channels,
+                input_dim=out_channels,
+                name="fc1")
+        self.bn = BatchNorm(
+            epsilon=bn_eps,
+            data_format=data_format,
+            name="bn")
+        self.activ = nn.ReLU()
+        if use_conv:
+            self.conv2 = conv1x1(
+                in_channels=mid_channels,
+                out_channels=in_channels,
+                use_bias=True,
+                data_format=data_format,
+                name="conv2")
+        else:
+            self.fc2 = nn.Dense(
+                units=in_channels,
+                input_dim=mid_channels,
+                name="fc2")
+        self.softmax = nn.Softmax(axis=1)
+
+    def call(self, x, training=None):
+        x_shape = x.get_shape().as_list()
+        batch = x_shape[0]
+        if is_channels_first(self.data_format):
+            channels = x_shape[1]
+            height = x_shape[2]
+            width = x_shape[3]
+            x = tf.reshape(x, shape=(batch, self.radix, channels // self.radix, height, width))
+            w = tf.math.reduce_sum(x, axis=1)
+        else:
+            height = x_shape[1]
+            width = x_shape[2]
+            channels = x_shape[3]
+            x = tf.reshape(x, shape=(batch, height, width, self.radix, channels // self.radix))
+            w = tf.math.reduce_sum(x, axis=-2)
+
+        w = self.pool(w)
+        if self.use_conv:
+            axis = -1 if is_channels_first(self.data_format) else 1
+            w = tf.expand_dims(tf.expand_dims(w, axis=axis), axis=axis)
+        w = self.conv1(w) if self.use_conv else self.fc1(w)
+        w = self.bn(w, training=training)
+        w = self.activ(w)
+        w = self.conv2(w) if self.use_conv else self.fc2(w)
+        w = tf.reshape(w, shape=(batch, self.groups, self.radix, -1))
+        w = tf.transpose(w, perm=(0, 2, 1, 3))
+        w = self.softmax(w)
+        if is_channels_first(self.data_format):
+            w = tf.reshape(w, shape=(batch, self.radix, -1, 1, 1))
+        else:
+            w = tf.reshape(w, shape=(batch, 1, 1, self.radix, -1))
+        x = x * w
+        if is_channels_first(self.data_format):
+            x = tf.math.reduce_sum(x, axis=1)
+        else:
+            x = tf.math.reduce_sum(x, axis=-2)
+        return x
+
+
+class SAConvBlock(nn.Layer):
+    """
+    Split-Attention convolution block from 'ResNeSt: Split-Attention Networks,' https://arxiv.org/abs/2004.08955.
+
+    Parameters:
+    ----------
+    in_channels : int
+        Number of input channels.
+    out_channels : int
+        Number of output channels.
+    kernel_size : int or tuple/list of 2 int
+        Convolution window size.
+    strides : int or tuple/list of 2 int
+        Strides of the convolution.
+    padding : int or tuple/list of 2 int
+        Padding value for convolution layer.
+    dilation : int or tuple/list of 2 int, default 1
+        Dilation value for convolution layer.
+    groups : int, default 1
+        Number of groups.
+    use_bias : bool, default False
+        Whether the layer uses a bias vector.
+    force_same : bool, default False
+        Whether to forcibly set `same` padding in convolution.
+    use_bn : bool, default True
+        Whether to use BatchNorm layer.
+    bn_eps : float, default 1e-5
+        Small float added to variance in Batch norm.
+    activation : function or str or None, default 'relu'
+        Activation function or name of activation function.
+    radix : int, default 2
+        Number of splits within a cardinal group.
+    reduction : int, default 4
+        Squeeze reduction value.
+    min_channels : int, default 32
+        Minimal number of squeezed channels.
+    use_conv : bool, default True
+        Whether to convolutional layers instead of fully-connected ones.
+    data_format : str, default 'channels_last'
+        The ordering of the dimensions in tensors.
+    """
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 strides,
+                 padding,
+                 dilation=1,
+                 groups=1,
+                 use_bias=False,
+                 force_same=False,
+                 use_bn=True,
+                 bn_eps=1e-5,
+                 activation="relu",
+                 radix=2,
+                 reduction=4,
+                 min_channels=32,
+                 use_conv=True,
+                 data_format="channels_last",
+                 **kwargs):
+        super(SAConvBlock, self).__init__(**kwargs)
+        self.conv = ConvBlock(
+            in_channels=in_channels,
+            out_channels=(out_channels * radix),
+            kernel_size=kernel_size,
+            strides=strides,
+            padding=padding,
+            dilation=dilation,
+            groups=(groups * radix),
+            use_bias=use_bias,
+            force_same=force_same,
+            use_bn=use_bn,
+            bn_eps=bn_eps,
+            activation=activation,
+            data_format=data_format,
+            name="conv")
+        self.att = SABlock(
+            out_channels=out_channels,
+            groups=groups,
+            radix=radix,
+            reduction=reduction,
+            min_channels=min_channels,
+            use_conv=use_conv,
+            bn_eps=bn_eps,
+            data_format=data_format,
+            name="att")
+
+    def call(self, x, training=None):
+        x = self.conv(x, training=training)
+        x = self.att(x, training=training)
+        return x
+
+
+def saconv3x3_block(in_channels,
+                    out_channels,
+                    strides=1,
+                    padding=1,
+                    **kwargs):
+    """
+    3x3 version of the Split-Attention convolution block.
+
+    Parameters:
+    ----------
+    in_channels : int
+        Number of input channels.
+    out_channels : int
+        Number of output channels.
+    strides : int or tuple/list of 2 int, default 1
+        Strides of the convolution.
+    padding : int or tuple/list of 2 int, default 1
+        Padding value for convolution layer.
+    """
+    return SAConvBlock(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=3,
+        strides=strides,
+        padding=padding,
+        **kwargs)
+
+
 class PixelShuffle(nn.Layer):
     """
     Pixel-shuffle operation from 'Real-Time Single Image and Video Super-Resolution Using an Efficient Sub-Pixel
     Convolutional Neural Network,' https://arxiv.org/abs/1609.05158.
+
     Parameters:
     ----------
     scale_factor : int
@@ -2454,7 +2716,6 @@ class PixelShuffle(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  scale_factor,
                  data_format="channels_last",
@@ -2501,6 +2762,7 @@ class PixelShuffle2(nn.Layer):
     """
     Pixel-shuffle operation from 'Real-Time Single Image and Video Super-Resolution Using an Efficient Sub-Pixel
     Convolutional Neural Network,' https://arxiv.org/abs/1609.05158. Alternative implementation.
+
     Parameters:
     ----------
     scale_factor : int
@@ -2508,7 +2770,6 @@ class PixelShuffle2(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  scale_factor,
                  data_format="channels_last",
@@ -2527,6 +2788,7 @@ class DucBlock(nn.Layer):
     """
     Dense Upsampling Convolution (DUC) block from 'Understanding Convolution for Semantic Segmentation,'
     https://arxiv.org/abs/1702.08502.
+
     Parameters:
     ----------
     in_channels : int
@@ -2538,7 +2800,6 @@ class DucBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -2568,7 +2829,6 @@ class Identity(nn.Layer):
     """
     Identity layer.
     """
-
     def __init__(self,
                  **kwargs):
         super(Identity, self).__init__(**kwargs)
@@ -2581,7 +2841,6 @@ class SimpleSequential(nn.Layer):
     """
     A sequential layer that can be used instead of tf.keras.Sequential.
     """
-
     def __init__(self,
                  **kwargs):
         super(SimpleSequential, self).__init__(**kwargs)
@@ -2608,7 +2867,6 @@ class ParametricSequential(SimpleSequential):
     A sequential container for layers with parameters.
     Layers will be executed in the order they are added.
     """
-
     def __init__(self,
                  **kwargs):
         super(ParametricSequential, self).__init__(**kwargs)
@@ -2623,6 +2881,7 @@ class DualPathSequential(SimpleSequential):
     """
     A sequential container for layers with dual inputs/outputs.
     Layers will be executed in the order they are added.
+
     Parameters:
     ----------
     return_two : bool, default True
@@ -2636,7 +2895,6 @@ class DualPathSequential(SimpleSequential):
     dual_path_scheme_ordinal : function
         Scheme of dual path response for an ordinal layer.
     """
-
     def __init__(self,
                  return_two=True,
                  first_ordinals=0,
@@ -2667,6 +2925,7 @@ class DualPathSequential(SimpleSequential):
 class Concurrent(SimpleSequential):
     """
     A container for concatenation of layers.
+
     Parameters:
     ----------
     stack : bool, default False
@@ -2674,7 +2933,6 @@ class Concurrent(SimpleSequential):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  stack=False,
                  data_format="channels_last",
@@ -2698,6 +2956,7 @@ class SequentialConcurrent(SimpleSequential):
     """
     A sequential container with concatenated outputs.
     Blocks will be executed in the order they are added.
+
     Parameters:
     ----------
     stack : bool, default False
@@ -2707,7 +2966,6 @@ class SequentialConcurrent(SimpleSequential):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  stack=False,
                  cat_input=True,
@@ -2733,12 +2991,12 @@ class SequentialConcurrent(SimpleSequential):
 class ParametricConcurrent(SimpleSequential):
     """
     A container for concatenation of layers with parameters.
+
     Parameters:
     ----------
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  data_format="channels_last",
                  **kwargs):
@@ -2757,6 +3015,7 @@ class MultiOutputSequential(SimpleSequential):
     """
     A sequential container with multiple outputs.
     Layers will be executed in the order they are added.
+
     Parameters:
     ----------
     multi_output : bool, default True
@@ -2766,7 +3025,6 @@ class MultiOutputSequential(SimpleSequential):
     return_last : bool, default True
         Whether to forcibly return last value.
     """
-
     def __init__(self,
                  multi_output=True,
                  dual_output=False,
@@ -2800,7 +3058,6 @@ class ParallelConcurent(SimpleSequential):
     A sequential container with multiple inputs and multiple outputs.
     Modules will be executed in the order they are added.
     """
-
     def __init__(self,
                  **kwargs):
         super(ParallelConcurent, self).__init__(**kwargs)
@@ -2815,6 +3072,7 @@ class ParallelConcurent(SimpleSequential):
 class InterpolationBlock(nn.Layer):
     """
     Bilinear interpolation block.
+
     Parameters:
     ----------
     scale_factor : int, default 1
@@ -2828,7 +3086,6 @@ class InterpolationBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  scale_factor=1,
                  out_size=None,
@@ -2841,7 +3098,7 @@ class InterpolationBlock(nn.Layer):
         self.out_size = out_size
         self.up = up
         self.data_format = data_format
-        self.method = tf.image.ResizeMethod.BILINEAR if interpolation == "bilinear" else \
+        self.method = tf.image.ResizeMethod.BILINEAR if interpolation == "bilinear" else\
             tf.image.ResizeMethod.NEAREST_NEIGHBOR
 
     def call(self, x, size=None, training=None):
@@ -2869,6 +3126,7 @@ class InterpolationBlock(nn.Layer):
 class Hourglass(nn.Layer):
     """
     A hourglass block.
+
     Parameters:
     ----------
     down_seq : nn.HybridSequential
@@ -2882,7 +3140,6 @@ class Hourglass(nn.Layer):
     return_first_skip : bool, default False
         Whether return the first skip connection output. Used in ResAttNet.
     """
-
     def __init__(self,
                  down_seq,
                  up_seq,
@@ -2931,6 +3188,7 @@ class Hourglass(nn.Layer):
 class HeatmapMaxDetBlock(nn.Layer):
     """
     Heatmap maximum detector block (for human pose estimation task).
+
     Parameters:
     ----------
     tune : bool, default True
@@ -2938,7 +3196,6 @@ class HeatmapMaxDetBlock(nn.Layer):
     data_format : str, default 'channels_last'
         The ordering of the dimensions in tensors.
     """
-
     def __init__(self,
                  tune=True,
                  data_format="channels_last",

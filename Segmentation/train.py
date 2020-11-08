@@ -1,6 +1,4 @@
-from models.get_model import get_model
 import tensorflow.keras as K
-import tensorflow_datasets as tfds
 import losses
 import argparse
 import os
@@ -10,16 +8,17 @@ from citys_visualizer import get_images_custom
 from visualization_dicts import gpu_cs_labels
 from utils.create_cityscapes_tfrecords import TFRecordsSeg
 import string
+from model_provider import get_model
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
-tf.config.experimental.set_memory_growth(physical_devices[1], True)
+for physical_device in physical_devices:
+    tf.config.experimental.set_memory_growth(physical_device, True)
 print("Physical_Devices: {}".format(physical_devices))
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("--dataset", type=str, default="cityscapes19", help="Name a dataset from the tf_dataset collection",
                   choices=["cityscapes", "cityscapes19"])
-args.add_argument("--n_classes", type=int, default=34, help="Number of classes")
+args.add_argument("--classes", type=int, default=34, help="Number of classes")
 args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
@@ -27,17 +26,17 @@ args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
 args.add_argument("--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
-args.add_argument("--model", type=str, default="bisenet", help="Select model", choices=["unet", "bisenet"])
+args.add_argument("--model", type=str, default="icnet_resnetd50b_cityscapes", help="Select model")
 args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 args.add_argument("--shuffle_buffer", type=int, default=10, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
-args.add_argument("--height", type=int, default=256, help="Size of the shuffle buffer")
+args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
 parsed = args.parse_args()
 
 dataset_name = parsed.dataset
 epochs = parsed.epochs
 batch_size = parsed.batch_size
-n_classes = parsed.n_classes
+classes = parsed.classes
 optimizer_name = parsed.optimizer
 lr = parsed.lr
 momentum = parsed.momentum
@@ -109,7 +108,7 @@ def train_step(input_imgs, labels, model, optim):
     :return: loss value
     """
     with tf.GradientTape() as tape:
-        logits = model(input_imgs)
+        logits = model(input_imgs)[0]
         probs = tf.nn.softmax(logits, axis=-1)
         loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, probs))
         # loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, probs))
@@ -121,7 +120,7 @@ def train_step(input_imgs, labels, model, optim):
 # =========== Training ============ #
 
 
-model = get_model(model_name, n_classes=n_classes, shp=(parsed.height, parsed.width))
+model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.width))
 train_writer = tf.summary.create_file_writer(logdir + "/train")
 val_writer = tf.summary.create_file_writer(logdir + "/validation")
 test_writer = tf.summary.create_file_writer(logdir + "/test")
@@ -134,11 +133,11 @@ manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 step = 0
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
-        tmp = model(mini_batch[0])
+        tmp = model(mini_batch[0])[0]
         train_probs = tf.nn.softmax(tmp / 255)
-        val_probs = tf.nn.softmax(model(val_mini_batch[0]) / 255)
-        train_labs = tf.one_hot(mini_batch[1][..., 0], n_classes)
-        val_labs = tf.one_hot(val_mini_batch[1][..., 0], n_classes)
+        val_probs = tf.nn.softmax(model(val_mini_batch[0])[0] / 255)
+        train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
+        val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
         loss = train_step(mini_batch[0], train_labs, model, optimizer)
         val_loss = losses.get_loss(val_probs,
                                    val_labs,
