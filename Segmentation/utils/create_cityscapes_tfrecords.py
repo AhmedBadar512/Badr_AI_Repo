@@ -2,10 +2,7 @@ import tensorflow as tf
 import pathlib
 import os
 import cv2
-from PIL import Image
 import numpy as np
-import tensorflow_addons as tfa
-import argparse
 import tqdm
 
 class TFRecordsSeg:
@@ -92,8 +89,7 @@ class TFRecordsSeg:
     def decode_strings(self, record):
         images = tf.io.decode_jpeg(record['image'], 3)
         labels = tf.io.decode_jpeg(record['label'], 3)
-        instance_labels = tf.io.decode_jpeg(record['instance_labels'], 3)
-        return images, labels, instance_labels
+        return images, labels
 
     def read_tfrecords(self):
         """
@@ -117,7 +113,6 @@ if __name__ == "__main__":
     image_dataset = example.read_tfrecords().repeat(10)
     cv2.namedWindow("img", 0)
     cv2.namedWindow("label", 0)
-    cv2.namedWindow("insts", 0)
     for image_features in image_dataset:
         img = image_features[0][..., ::-1]
         label = image_features[1]
@@ -125,7 +120,6 @@ if __name__ == "__main__":
         insts = image_features[2]
         cv2.imshow("img", img.numpy())
         cv2.imshow("label", label.numpy()/classes)
-        cv2.imshow("insts", insts.numpy())
         cv2.waitKey()
 
     #     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
