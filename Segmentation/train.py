@@ -18,7 +18,7 @@ print("Physical_Devices: {}".format(physical_devices))
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("--dataset", type=str, default="cityscapes19", help="Name a dataset from the tf_dataset collection",
                   choices=["cityscapes", "cityscapes19"])
-args.add_argument("--classes", type=int, default=34, help="Number of classes")
+args.add_argument("--classes", type=int, default=19, help="Number of classes")
 args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
@@ -98,24 +98,13 @@ val_metrics = [tf.keras.metrics.Accuracy()]
 total_steps = 0
 
 
-def train_step(input_imgs, labels, model, optim):
-    """
-    Train step for model
-    :param input_imgs: Input image tensors
-    :param labels: GT labels
-    :param model: Keras model to be trained
-    :param optim: keras/tf optimizer
-    :return: loss value
-    """
-    with tf.GradientTape() as tape:
-        logits = model(input_imgs)[0]
-        probs = tf.nn.softmax(logits, axis=-1)
-        loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, probs))
-        # loss = tf.reduce_mean(K.losses.categorical_crossentropy(labels, probs))
-    grads = tape.gradient(loss, model.trainable_variables)
-    optim.apply_gradients(zip(grads, model.trainable_variables))
-    return loss
-
+def train_step(tape, loss, model, optimizer, filter=None):
+    if filter is not None:
+        trainable_vars = [var for var in model.trainable_variables if filter in var.name]
+    else:
+        trainable_vars = model.trainable_variables
+    grads = tape.gradient(loss, trainable_vars)
+    optimizer.apply_gradients(zip(grads, trainable_vars))
 
 # =========== Training ============ #
 
@@ -128,21 +117,19 @@ test_writer = tf.summary.create_file_writer(logdir + "/test")
 # TODO: Add a proper way of handling logs in absence of validation or test data
 ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, iterator=dataset_train)
 manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
-
+calc_loss = losses.get_loss(name='cross_entropy', from_logits=False)
 # writer.set_as_default()
 step = 0
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
-        tmp = model(mini_batch[0])[0]
-        train_probs = tf.nn.softmax(tmp / 255)
-        val_probs = tf.nn.softmax(model(val_mini_batch[0])[0] / 255)
-        train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
+        with tf.GradientTape() as tape:
+            train_logits = model(mini_batch[0])[0]
+            train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
+            loss = calc_loss(train_labs, train_logits)
+        val_logits = model(val_mini_batch[0])[0]
         val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
-        loss = train_step(mini_batch[0], train_labs, model, optimizer)
-        val_loss = losses.get_loss(val_probs,
-                                   val_labs,
-                                   name='cross_entropy',
-                                   from_logits=False)
+        train_step(tape, loss, model, optimizer)
+        val_loss = calc_loss(val_labs, val_logits)
         print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size, total_samples, loss.numpy(),
                                                               val_loss.numpy()))
         curr_step = total_steps + step
@@ -150,20 +137,13 @@ for epoch in range(epochs):
             with train_writer.as_default():
                 tf.summary.scalar("loss", loss,
                                   step=curr_step)
-                tf.summary.image("pred", gpu_cs_labels(tf.argmax(train_probs, axis=-1), cs_19), step=curr_step)
+                tf.summary.image("pred", gpu_cs_labels(tf.argmax(train_logits, axis=-1), cs_19), step=curr_step)
                 tf.summary.image("gt", gpu_cs_labels(mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
             with test_writer.as_default():
                 tf.summary.scalar("loss", val_loss,
                                   step=curr_step)
-                tf.summary.image("val_pred", gpu_cs_labels(tf.argmax(val_probs, axis=-1), cs_19), step=curr_step)
+                tf.summary.image("val_pred", gpu_cs_labels(tf.argmax(val_logits, axis=-1), cs_19), step=curr_step)
                 tf.summary.image("val_gt", gpu_cs_labels(val_mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
-            # for t_metric, v_metric in zip(train_metrics, val_metrics):
-            #     _, _ = t_metric.update_state(mini_batch['label'], tf.argmax(train_probs, axis=-1)), \
-            #            v_metric.update_state(val_mini_batch['label'], tf.argmax(val_probs, axis=-1))
-            #     with train_writer.as_default():
-            #         tf.summary.scalar(t_metric.name, t_metric.result(), curr_step)
-            #     with test_writer.as_default():
-            #         tf.summary.scalar(v_metric.name, v_metric.result(), curr_step)
         with train_writer.as_default():
             tmp = lr_scheduler(step=total_steps)
             tf.summary.scalar("Learning Rate", tmp, curr_step)
