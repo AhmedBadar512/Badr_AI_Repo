@@ -57,10 +57,10 @@ if dataset_name == "cityscapes19":
 else:
     cs_19 = False
 
-dataset_train = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/train.tfrecords",
-                             split='train').read_tfrecords()
-dataset_validation = TFRecordsSeg(data_dir="/datasets/custom/cityscapes/", tfrecord_path="/volumes1/val.tfrecords",
-                                  split='val').read_tfrecords()
+dataset_train = TFRecordsSeg(
+    tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
+dataset_validation = TFRecordsSeg(
+    tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
 # dataset_test = None
 
 # =========== Process dataset ============ #
@@ -77,10 +77,10 @@ dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).
 
 eval_dataset = dataset_validation
 
-get_images_new = lambda *features: get_images_custom(features, (parsed.height, parsed.width), cs_19)
+get_images_processed = lambda image, label: get_images_custom(image, label, (parsed.height, parsed.width), cs_19)
 
-processed_train = dataset_train.map(get_images_new)
-processed_val = dataset_validation.map(get_images_new)
+processed_train = dataset_train.map(get_images_processed)
+processed_val = dataset_validation.map(get_images_processed)
 # =========== Optimizer and Training Setup ============ #
 # lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
 #                                                                     [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
@@ -106,13 +106,14 @@ def train_step(tape, loss, model, optimizer, filter=None):
     grads = tape.gradient(loss, trainable_vars)
     optimizer.apply_gradients(zip(grads, trainable_vars))
 
+
 # =========== Training ============ #
 
 
 model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.width))
-train_writer = tf.summary.create_file_writer(logdir + "/train")
-val_writer = tf.summary.create_file_writer(logdir + "/validation")
-test_writer = tf.summary.create_file_writer(logdir + "/test")
+train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
+val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
+# test_writer = tf.summary.create_file_writer(os.path.join(logdir, "test"))
 
 # TODO: Add a proper way of handling logs in absence of validation or test data
 ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, iterator=dataset_train)
@@ -120,6 +121,16 @@ manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 calc_loss = losses.get_loss(name='cross_entropy', from_logits=False)
 # writer.set_as_default()
 step = 0
+
+
+def write_summary_images(batch, logits):
+    tf.summary.image("images", batch[0] / 255, step=curr_step)
+    tf.summary.image("pred", gpu_cs_labels(tf.argmax(logits, axis=-1), cs_19), step=curr_step)
+    tf.summary.image("gt", gpu_cs_labels(batch[1][..., tf.newaxis], cs_19), step=curr_step)
+
+
+mini_batch, train_logits = None, None
+val_mini_batch, val_logits = None, None
 for epoch in range(epochs):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
         with tf.GradientTape() as tape:
@@ -137,20 +148,19 @@ for epoch in range(epochs):
             with train_writer.as_default():
                 tf.summary.scalar("loss", loss,
                                   step=curr_step)
-                tf.summary.image("pred", gpu_cs_labels(tf.argmax(train_logits, axis=-1), cs_19), step=curr_step)
-                tf.summary.image("gt", gpu_cs_labels(mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
-            with test_writer.as_default():
+            with val_writer.as_default():
                 tf.summary.scalar("loss", val_loss,
                                   step=curr_step)
-                tf.summary.image("val_pred", gpu_cs_labels(tf.argmax(val_logits, axis=-1), cs_19), step=curr_step)
-                tf.summary.image("val_gt", gpu_cs_labels(val_mini_batch[1][..., tf.newaxis], cs_19), step=curr_step)
         with train_writer.as_default():
             tmp = lr_scheduler(step=total_steps)
             tf.summary.scalar("Learning Rate", tmp, curr_step)
     total_steps += (step + 1)
-    # for t_metric, v_metric in zip(train_metrics, val_metrics):
-    #     t_metric.reset_states()
-    #     v_metric.reset_states()
     ckpt.step.assign_add(step + 1)
     if epoch % parsed.save_interval:
         manager.save()
+    with train_writer.as_default():
+        if mini_batch is not None:
+            write_summary_images(mini_batch, train_logits)
+    with val_writer.as_default():
+        if val_mini_batch is not None:
+            write_summary_images(val_mini_batch, val_logits)
