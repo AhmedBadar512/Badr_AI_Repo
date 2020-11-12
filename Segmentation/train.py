@@ -32,8 +32,23 @@ args.add_argument("--save_dir", type=str, default="./runs", help="Save directory
 args.add_argument("--shuffle_buffer", type=int, default=10, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
+# ============ Augmentation Arguments ===================== #
+args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
+args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
+args.add_argument("--random_crop_height", type=int, default=None,
+                  help="Height of random crop, random_crop_width must be given with this")
+args.add_argument("--random_crop_width", type=int, default=None,
+                  help="Width of random crop, random_crop_height must be given with this")
+args.add_argument("--random_hue", action="store_true", default=False, help="Randomly change hue")
+args.add_argument("--random_saturation", action="store_true", default=False, help="Randomly change saturation")
+args.add_argument("--random_brightness", action="store_true", default=False, help="Randomly change brightness")
+args.add_argument("--random_contrast", action="store_true", default=False, help="Randomly change contrast")
+args.add_argument("--random_quality", action="store_true", default=False, help="Randomly change jpeg quality")
 parsed = args.parse_args()
 
+random_crop_size = parsed.radom_crop_width, parsed.radom_crop_height \
+    if parsed.radom_crop_width is not None and parsed.radom_crop_height is not None \
+    else None
 dataset_name = parsed.dataset
 epochs = parsed.epochs
 batch_size = parsed.batch_size
@@ -62,8 +77,15 @@ dataset_train = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
 dataset_validation = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
-# TODO: Add arguments for augmentation
-augmentor = lambda image, label: aug.augment(image, label, True, False, None, True, True, True, True, True)
+augmentor = lambda image, label: aug.augment(image, label,
+                                             parsed.flip_up_down,
+                                             parsed.flip_left_right,
+                                             random_crop_size,
+                                             parsed.random_hue,
+                                             parsed.random_saturation,
+                                             parsed.random_brightness,
+                                             parsed.random_contrast,
+                                             parsed.random_quality)
 dataset_train = dataset_train.map(augmentor)
 # dataset_test = None
 
@@ -75,7 +97,6 @@ total_samples = len(list(dataset_train))
 
 dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
-#  TODO: Get dataset shape
 dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
 
