@@ -9,6 +9,7 @@ from visualization_dicts import gpu_cs_labels
 from utils.create_cityscapes_tfrecords import TFRecordsSeg
 import string
 from model_provider import get_model
+import utils.augment_images as aug
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 for physical_device in physical_devices:
@@ -61,6 +62,9 @@ dataset_train = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
 dataset_validation = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
+# TODO: Add arguments for augmentation
+augmentor = lambda image, label: aug.augment(image, label, True, False, None, True, True, True, True, True)
+dataset_train = dataset_train.map(augmentor)
 # dataset_test = None
 
 # =========== Process dataset ============ #
@@ -76,7 +80,6 @@ dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).
     if (dataset_validation is not None) else None
 
 eval_dataset = dataset_validation
-
 get_images_processed = lambda image, label: get_images_custom(image, label, (parsed.height, parsed.width), cs_19)
 
 processed_train = dataset_train.map(get_images_processed)
