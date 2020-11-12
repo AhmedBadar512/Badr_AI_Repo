@@ -137,13 +137,10 @@ def train_step(tape, loss, model, optimizer, filter=None):
 model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.width))
 train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
 val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
-# test_writer = tf.summary.create_file_writer(os.path.join(logdir, "test"))
 
-# TODO: Add a proper way of handling logs in absence of validation or test data
 ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, iterator=dataset_train)
 manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 calc_loss = losses.get_loss(name='cross_entropy', from_logits=False)
-# writer.set_as_default()
 step = 0
 
 
