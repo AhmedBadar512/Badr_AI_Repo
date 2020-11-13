@@ -143,10 +143,11 @@ def train_step(tape, loss, model, optimizer, filter=None, first_batch=False):
 
 
 model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.width))
-train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
-val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
+if hvd.local_rank() == 0:
+    train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
+    val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 
-calc_loss = losses.get_loss(name='cross_entropy', from_logits=False)
+calc_loss = losses.get_loss(name='cross_entropy', from_logits=True)
 step = 0
 
 
