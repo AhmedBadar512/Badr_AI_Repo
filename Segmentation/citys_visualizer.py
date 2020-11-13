@@ -8,7 +8,8 @@ import numpy as np
 import utils.augment_images as aug
 import os
 
-os.makedirs("/volumes1/tmp", exist_ok=True)
+test_dir = "./test"
+os.makedirs(test_dir, exist_ok=True)
 
 
 def display(img_list, seg_list, pred_list=None, cs_19=True):
@@ -23,7 +24,7 @@ def display(img_list, seg_list, pred_list=None, cs_19=True):
         final_img = np.concatenate([new_img, new_seg, new_pred])
     else:
         final_img = np.concatenate([new_img, new_seg])
-    cv2.imwrite("/volumes1/tmp/test_{}.jpg".format(np.random.randint(0, 10000)), final_img)
+    cv2.imwrite("{}/test_{}.jpg".format(test_dir, np.random.randint(0, 10000)), final_img)
     print(final_img.shape)
     # cv2.namedWindow("My_Window", 0)
     # cv2.imshow("My_Window", final_img)
