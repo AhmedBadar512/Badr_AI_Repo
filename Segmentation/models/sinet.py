@@ -949,7 +949,8 @@ class SBDecodeBlock(nn.Layer):
         x = self.bn(x, training=None)
         w_conf = tf.nn.softmax(x)
         axis = get_channel_axis(self.data_format)
-        w_max = tf.broadcast_to(tf.expand_dims(tf.reduce_max(w_conf, axis=axis), axis=axis), shape=x.shape)
+        # w_max = tf.broadcast_to(tf.expand_dims(tf.reduce_max(w_conf, axis=axis), axis=axis), shape=x.shape)
+        w_max = tf.repeat(tf.expand_dims(tf.reduce_max(w_conf, axis=axis), axis=axis), x.shape[axis], axis=axis)
         x = y * (1 - w_max) + x
         return x
 
