@@ -74,7 +74,7 @@ else:
     cs_19 = False
 
 dataset_train = TFRecordsSeg(
-    tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
+    tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
 dataset_validation = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
 augmentor = lambda image, label: aug.augment(image, label,
