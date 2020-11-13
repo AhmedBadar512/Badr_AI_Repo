@@ -27,7 +27,7 @@ args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
 args.add_argument("--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
-args.add_argument("--model", type=str, default="icnet_resnetd50b_cityscapes", help="Select model")
+args.add_argument("--model", type=str, default="sinet_cityscapes", help="Select model")
 args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 args.add_argument("--shuffle_buffer", type=int, default=10, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
@@ -46,8 +46,8 @@ args.add_argument("--random_contrast", action="store_true", default=False, help=
 args.add_argument("--random_quality", action="store_true", default=False, help="Randomly change jpeg quality")
 parsed = args.parse_args()
 
-random_crop_size = parsed.radom_crop_width, parsed.radom_crop_height \
-    if parsed.radom_crop_width is not None and parsed.radom_crop_height is not None \
+random_crop_size = (parsed.random_crop_width, parsed.random_crop_height) \
+    if parsed.random_crop_width is not None and parsed.random_crop_height is not None \
     else None
 dataset_name = parsed.dataset
 epochs = parsed.epochs
@@ -74,7 +74,7 @@ else:
     cs_19 = False
 
 dataset_train = TFRecordsSeg(
-    tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
+    tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
 dataset_validation = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
 augmentor = lambda image, label: aug.augment(image, label,
@@ -138,8 +138,6 @@ model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.wi
 train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
 val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 
-ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model, iterator=dataset_train)
-manager = tf.train.CheckpointManager(ckpt, logdir + "/models/", max_to_keep=10)
 calc_loss = losses.get_loss(name='cross_entropy', from_logits=False)
 step = 0
 
@@ -152,13 +150,13 @@ def write_summary_images(batch, logits):
 
 mini_batch, train_logits = None, None
 val_mini_batch, val_logits = None, None
-for epoch in range(epochs):
+for epoch in range(1, epochs + 1):
     for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
         with tf.GradientTape() as tape:
-            train_logits = model(mini_batch[0])[0]
+            train_logits = model(mini_batch[0])
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
             loss = calc_loss(train_labs, train_logits)
-        val_logits = model(val_mini_batch[0])[0]
+        val_logits = model(val_mini_batch[0])
         val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
         train_step(tape, loss, model, optimizer)
         val_loss = calc_loss(val_labs, val_logits)
@@ -176,9 +174,8 @@ for epoch in range(epochs):
             tmp = lr_scheduler(step=total_steps)
             tf.summary.scalar("Learning Rate", tmp, curr_step)
     total_steps += (step + 1)
-    ckpt.step.assign_add(step + 1)
-    if epoch % parsed.save_interval:
-        manager.save()
+    if (epoch % parsed.save_interval) == 0:
+        tf.saved_model.save(model, os.path.join(logdir, model_name, str(epoch)))
     with train_writer.as_default():
         if mini_batch is not None:
             write_summary_images(mini_batch, train_logits)
