@@ -147,7 +147,7 @@ if hvd.local_rank() == 0:
     train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
     val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 
-calc_loss = losses.get_loss(name='cross_entropy', from_logits=True)
+calc_loss = losses.get_loss(name='cross_entropy')
 step = 0
 
 
