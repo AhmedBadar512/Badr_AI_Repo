@@ -6,7 +6,7 @@ import tensorflow as tf
 import datetime
 from citys_visualizer import get_images_custom
 from visualization_dicts import gpu_cs_labels
-from utils.create_cityscapes_tfrecords import TFRecordsSeg
+from utils.create_seg_tfrecords import TFRecordsSeg
 import string
 from model_provider import get_model
 import utils.augment_images as aug

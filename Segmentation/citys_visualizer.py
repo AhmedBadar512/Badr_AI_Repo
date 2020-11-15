@@ -47,7 +47,7 @@ def get_images_custom(image, label, shp=(256, 512), cs_19=False):
 
 
 if __name__ == "__main__":
-    from utils.create_cityscapes_tfrecords import TFRecordsSeg
+    from utils.create_seg_tfrecords import TFRecordsSeg
     ds_train = TFRecordsSeg(tfrecord_path="/volumes1/train.tfrecords").read_tfrecords()
     ds_val = TFRecordsSeg(tfrecord_path="/volumes1/val.tfrecords").read_tfrecords()
     # ds_val = tfds.load(name="cityscapes", split='validation', data_dir="/datasets/")
