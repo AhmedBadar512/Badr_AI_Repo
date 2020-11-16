@@ -11,6 +11,9 @@ import string
 from model_provider import get_model
 import utils.augment_images as aug
 import horovod.tensorflow as hvd
+import tqdm
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 hvd.init()
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
@@ -29,11 +32,13 @@ args.add_argument("--epochs", type=int, default=100, help="Number of epochs to t
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
-args.add_argument("--batch_size", type=int, default=4, help="Size of mini-batch")
-args.add_argument("--save_interval", type=int, default=1, help="Save interval for model")
+args.add_argument("--batch_size", type=int, default=8, help="Size of mini-batch")
+args.add_argument("--save_interval", type=int, default=5, help="Save interval for model")
+args.add_argument("--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
+                                                                            "after these many logging steps")
 args.add_argument("--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
 args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
-args.add_argument("--shuffle_buffer", type=int, default=10, help="Size of the shuffle buffer")
+args.add_argument("--shuffle_buffer", type=int, default=4096, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
 # ============ Augmentation Arguments ===================== #
@@ -62,6 +67,7 @@ lr = parsed.lr
 momentum = parsed.momentum
 model_name = parsed.model
 log_freq = parsed.logging_freq
+write_image_summary_steps = parsed.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
 logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
@@ -101,7 +107,7 @@ total_samples = len(list(dataset_train))
 
 dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
-dataset_validation = dataset_validation.repeat().shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
+dataset_validation = dataset_validation.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
 
 eval_dataset = dataset_validation
@@ -149,6 +155,7 @@ if hvd.local_rank() == 0:
 
 calc_loss = losses.get_loss(name='cross_entropy')
 step = 0
+curr_step = 0
 
 
 def write_summary_images(batch, logits):
@@ -159,40 +166,44 @@ def write_summary_images(batch, logits):
 
 mini_batch, train_logits = None, None
 val_mini_batch, val_logits = None, None
+image_write_step = 0
 for epoch in range(1, epochs + 1):
-    for step, (mini_batch, val_mini_batch) in enumerate(zip(processed_train, processed_val)):
+    for step, mini_batch in enumerate(processed_train):
         if step * batch_size * hvd.size() > total_samples:
             continue
         with tf.GradientTape() as tape:
             train_logits = model(mini_batch[0])[0]
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
             loss = calc_loss(train_labs, train_logits)
-        val_logits = model(val_mini_batch[0])[0]
-        val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
         train_step(tape, loss, model, optimizer, first_batch=(step == 0))
-        val_loss = calc_loss(val_labs, val_logits)
         if hvd.local_rank() == 0:
-            print("Epoch {}: {}/{}, Loss: {} Val Loss: {}".format(epoch, step * batch_size * hvd.size(), total_samples,
-                                                                  loss.numpy(),
-                                                                  val_loss.numpy()))
+            print("Epoch {}: {}/{}, Loss: {}".format(epoch, step * batch_size * hvd.size(), total_samples,
+                                                     loss.numpy()))
             curr_step = total_steps + step
             if curr_step % log_freq == 0:
+                image_write_step += 1
                 with train_writer.as_default():
                     tf.summary.scalar("loss", loss,
                                       step=curr_step)
-                with val_writer.as_default():
-                    tf.summary.scalar("loss", val_loss,
-                                      step=curr_step)
+                    if mini_batch is not None and (step % write_image_summary_steps == 0):
+                        write_summary_images(mini_batch, train_logits)
             with train_writer.as_default():
                 tmp = lr_scheduler(step=total_steps)
                 tf.summary.scalar("Learning Rate", tmp, curr_step)
     if hvd.local_rank() == 0:
-        total_steps += (step + 1)
-        if (epoch % parsed.save_interval) == 0:
+        total_steps += (curr_step + 1)
+        if epoch % parsed.save_interval == 0:
             tf.saved_model.save(model, os.path.join(logdir, model_name, str(epoch)))
-        with train_writer.as_default():
-            if mini_batch is not None:
-                write_summary_images(mini_batch, train_logits)
+            print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
+        total_val_loss = []
+        for val_mini_batch in tqdm.tqdm(processed_val):
+            val_logits = model(val_mini_batch[0])[0]
+            val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
+            total_val_loss.append(calc_loss(val_labs, val_logits))
+        val_loss = tf.reduce_mean(total_val_loss)
         with val_writer.as_default():
+            tf.summary.scalar("loss", val_loss,
+                              step=curr_step)
             if val_mini_batch is not None:
                 write_summary_images(val_mini_batch, val_logits)
+        print("Val Epoch: {}".format(val_loss))
