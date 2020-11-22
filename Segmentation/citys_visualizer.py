@@ -10,10 +10,14 @@ import os
 
 test_dir = "./test"
 os.makedirs(test_dir, exist_ok=True)
+c_map = vis.generate_random_colors()
 
 
-def display(img_list, seg_list, pred_list=None, cs_19=True):
-    seg_list = vis.gpu_cs_labels(seg_list, cs_19)
+def display(img_list, seg_list, pred_list=None, cs_19=False):
+    if cs_19:
+        seg_list = vis.gpu_cs_labels(seg_list, cs_19)
+    else:
+        seg_list = vis.gpu_random_labels(seg_list, c_map)
     img_list, seg_list = img_list.numpy(), seg_list.numpy()
     new_img = cv2.hconcat(img_list[..., ::-1])
     new_seg = cv2.hconcat(seg_list[..., ::-1])
@@ -25,9 +29,9 @@ def display(img_list, seg_list, pred_list=None, cs_19=True):
     else:
         final_img = np.concatenate([new_img, new_seg])
     cv2.imwrite("{}/test_{}.jpg".format(test_dir, np.random.randint(0, 10000)), final_img)
-    print(final_img.shape)
+    # print(final_img.shape)
     # cv2.namedWindow("My_Window", 0)
-    # cv2.imshow("My_Window", final_img)
+    # cv2.imshow("My_Window", final_img/255)
     # cv2.waitKey(3000)
 
 
@@ -63,5 +67,5 @@ if __name__ == "__main__":
     for image, segmentation in ds_train_new:
         # image, segmentation = features
         print(image.shape, segmentation.shape)
-        display(image, segmentation, cs_19=cs_19)
+        display(image, segmentation, cs_19=False, cmap=c_map)
     cv2.destroyAllWindows()

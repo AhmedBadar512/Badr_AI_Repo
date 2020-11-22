@@ -95,6 +95,11 @@ def get_cityscapes():
     return labels
 
 
+def generate_random_colors(n=256):
+    cmp = tf.random.uniform((n, 3), minval=0, maxval=255, dtype=tf.int32, seed=0)
+    return cmp
+
+
 def convert_cs_19(segmentation):
     cs_dict = get_cityscapes()
     cs_19_map = [tf.where(segmentation == label[1], label[2] + 1, 0)
@@ -126,3 +131,13 @@ def gpu_cs_labels(segmentation_maps, with_train_ids=True):
             new_img = new_img + tmp * label[-1]
         new_imgs.append(new_img)
     return tf.stack(new_imgs)
+
+
+def gpu_random_labels(segmentation_maps, cmp):
+    """
+    segmentation_map: (b, h, w, 1) or (b, h, w)
+    """
+    if len(segmentation_maps.shape) == 4:
+        segmentation_maps = segmentation_maps[..., 0]
+    color_imgs = tf.gather(params=cmp, indices=segmentation_maps)
+    return color_imgs
