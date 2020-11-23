@@ -58,6 +58,7 @@ imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 
 def infer(im_path):
     im = cv2.imread(im_path)[..., ::-1]
+    height_old, width_old = im.shape[0:2]
     if not args.no_input_resize:
         im = cv2.resize(im, (width, height))
     img = tf.constant(im.astype(np.float32))
@@ -66,7 +67,12 @@ def infer(im_path):
         seg = tf.argmax(outputs[0], axis=-1)
     else:
         seg = tf.argmax(outputs, axis=-1)
-    display(img[np.newaxis], seg[..., np.newaxis], cs_19=args.cs19, save_dir=save_dir, img_path=im_path)
+    img = img[np.newaxis]
+    seg = seg[..., np.newaxis]
+    if args.resize_original:
+        img = tf.image.resize(img, size=(height_old, width_old))
+        seg = tf.image.resize(seg, size=(height_old, width_old), method="nearest")
+    display(img, seg, cs_19=args.cs19, save_dir=save_dir, img_path=im_path)
 
 
 if __name__ == "__main__":
