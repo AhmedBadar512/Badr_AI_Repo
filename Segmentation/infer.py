@@ -2,26 +2,73 @@ import tensorflow as tf
 import multiprocessing as mp
 import numpy as np
 import cv2
-import glob
+import pathlib
 from citys_visualizer import display
 import tqdm
-import time
-import os
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input
+import argparse
 
 # TODO: Add model loading
-pool = mp.Pool(os.cpu_count()//2)
-path = "/volumes1/Code/Badr_AI_Repo/Segmentation/runs/logs/cityscapes19_epochs-100_bs-8_Adam_lr-0.0001_bisenet_resnet18_celebamaskhq_20201115-121303012722/bisenet_resnet18_celebamaskhq/15"
+args = argparse.ArgumentParser(description="Infer with a given Checkpoint")
+args.add_argument("--img_dir",
+                  type=str,
+                  default="/data/input/datasets/cityscape_processed/leftImg8bit/val/munster",
+                  help="Path containing the png/jpg files")
+args.add_argument("-m", "--model_dir",
+                  type=str,
+                  default="/volumes1/Code/Badr_AI_Repo/Segmentation/runs/logs/cityscapes19_epochs-100_bs-8_Adam_lr-0.0001_bisenet_resnet18_celebamaskhq_20201115-121303012722/bisenet_resnet18_celebamaskhq/15",
+                  help="Path to TF2 saved model dir")
+args.add_argument("-s", "--save_dir",
+                  type=str,
+                  default=None,
+                  help="Path to TF2 saved model dir")
+args.add_argument("--cs19",
+                  action="store_true",
+                  default=False,
+                  help="Colorize based on CS-19 color pallete, use only if n_classes<=19")
+args.add_argument("--height",
+                  type=int,
+                  default=512,
+                  help="Path to TF2 saved model dir")
+args.add_argument("--width",
+                  type=int,
+                  default=1024,
+                  help="Path to TF2 saved model dir")
+args.add_argument("-nir",
+                  "--no_input_resize",
+                  action="store_true",
+                  default=False,
+                  help="If true input images are not resized")
+args.add_argument("-rso",
+                  "--resize_original",
+                  action="store_true",
+                  default=False,
+                  help="If true output images are resized back to input image size")
+args = args.parse_args()
+
+width, height = args.width, args.height
+img_dir = args.img_dir
+path = args.model_dir
+save_dir = args.save_dir
 imported = tf.saved_model.load(path)
-imgs = glob.glob("/data/input/datasets/cityscape_processed/leftImg8bit/val/munster/*g")
+exts = ["*jpg", "*png", "*jpeg"]
+imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 
 
 def infer(im_path):
-    img = tf.constant(cv2.resize(cv2.imread(im_path)[..., ::-1], (1024, 512)).astype(np.float32))
+    im = cv2.imread(im_path)[..., ::-1]
+    if not args.no_input_resize:
+        im = cv2.resize(im, (width, height))
+    img = tf.constant(im.astype(np.float32))
     outputs = imported(img[np.newaxis], False)
-    seg = tf.argmax(outputs[0], axis=-1)
-    display(img[np.newaxis], seg[..., np.newaxis], cs_19=False)
+    if type(outputs) is list or type(outputs) is tuple:
+        seg = tf.argmax(outputs[0], axis=-1)
+    else:
+        seg = tf.argmax(outputs, axis=-1)
+    display(img[np.newaxis], seg[..., np.newaxis], cs_19=args.cs19, save_dir=save_dir, img_path=im_path)
 
 
-for img_path in tqdm.tqdm(imgs):
-    infer(img_path)
-# TODO: Inference test
+if __name__ == "__main__":
+    for img_path in tqdm.tqdm(imgs):
+        infer(img_path)

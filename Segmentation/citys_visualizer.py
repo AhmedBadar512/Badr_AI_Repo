@@ -8,12 +8,10 @@ import numpy as np
 import utils.augment_images as aug
 import os
 
-test_dir = "./test"
-os.makedirs(test_dir, exist_ok=True)
 c_map = vis.generate_random_colors()
 
 
-def display(img_list, seg_list, pred_list=None, cs_19=False):
+def display(img_list, seg_list, pred_list=None, cs_19=False, save_dir=None, img_path=None):
     if cs_19:
         seg_list = vis.gpu_cs_labels(seg_list, cs_19)
     else:
@@ -28,11 +26,16 @@ def display(img_list, seg_list, pred_list=None, cs_19=False):
         final_img = np.concatenate([new_img, new_seg, new_pred])
     else:
         final_img = np.concatenate([new_img, new_seg])
-    cv2.imwrite("{}/test_{}.jpg".format(test_dir, np.random.randint(0, 10000)), final_img)
-    # print(final_img.shape)
-    # cv2.namedWindow("My_Window", 0)
-    # cv2.imshow("My_Window", final_img/255)
-    # cv2.waitKey(3000)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        if img_path is None:
+            cv2.imwrite("{}/test_{}.jpg".format(save_dir, np.random.randint(0, 10000)), final_img)
+        else:
+            cv2.imwrite("{}/{}.jpg".format(save_dir, os.path.basename(img_path)), final_img)
+    else:
+        cv2.namedWindow("My_Window", 0)
+        cv2.imshow("My_Window", final_img/255)
+        cv2.waitKey()
 
 
 def get_images_custom(image, label, shp=(256, 512), cs_19=False):
@@ -67,5 +70,5 @@ if __name__ == "__main__":
     for image, segmentation in ds_train_new:
         # image, segmentation = features
         print(image.shape, segmentation.shape)
-        display(image, segmentation, cs_19=False, cmap=c_map)
+        display(image, segmentation, cs_19=False, save_dir=None)
     cv2.destroyAllWindows()
