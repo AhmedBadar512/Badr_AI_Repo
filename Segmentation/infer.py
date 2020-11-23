@@ -5,8 +5,6 @@ import cv2
 import pathlib
 from citys_visualizer import display
 import tqdm
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input
 import argparse
 
 # TODO: Add model loading
