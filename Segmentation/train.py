@@ -2,20 +2,19 @@ import tensorflow.keras as K
 import losses
 import argparse
 import os
+import horovod.tensorflow as hvd
 import tensorflow as tf
 import datetime
 from citys_visualizer import get_images_custom
-from visualization_dicts import gpu_cs_labels
+from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
 from utils.create_seg_tfrecords import TFRecordsSeg
 import string
 from model_provider import get_model
 import utils.augment_images as aug
-import horovod.tensorflow as hvd
 import tqdm
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '5'
 hvd.init()
-
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 for physical_device in physical_devices:
     tf.config.experimental.set_memory_growth(physical_device, True)
@@ -24,23 +23,25 @@ if physical_devices:
     tf.config.experimental.set_visible_devices(physical_devices[hvd.local_rank()], 'GPU')
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("--dataset", type=str, default="cityscapes19", help="Name a dataset from the tf_dataset collection",
+args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
+                  help="Name a dataset from the tf_dataset collection",
                   choices=["cityscapes", "cityscapes19"])
-args.add_argument("--classes", type=int, default=19, help="Number of classes")
-args.add_argument("--optimizer", type=str, default="Adam", help="Select optimizer", choices=["SGD", "RMSProp", "Adam"])
-args.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
+args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
+args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
+                  choices=["SGD", "RMSProp", "Adam"])
+args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
-args.add_argument("--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
-args.add_argument("--batch_size", type=int, default=8, help="Size of mini-batch")
-args.add_argument("--save_interval", type=int, default=5, help="Save interval for model")
-args.add_argument("--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
-                                                                            "after these many logging steps")
-args.add_argument("--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
-args.add_argument("--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
-args.add_argument("--shuffle_buffer", type=int, default=4096, help="Size of the shuffle buffer")
-args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
-args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
+args.add_argument("-l", "--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
+args.add_argument("-bs", "--batch_size", type=int, default=2, help="Size of mini-batch")
+args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
+args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
+                                                                                   "after these many logging steps")
+args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
+args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
+args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
+args.add_argument("--width", type=int, default=256, help="Size of the shuffle buffer")
+args.add_argument("--height", type=int, default=256, help="Size of the shuffle buffer")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -70,9 +71,9 @@ log_freq = parsed.logging_freq
 write_image_summary_steps = parsed.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
-logdir = os.path.join(parsed.save_dir, "logs/{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                       optimizer_name, lr, model_name,
-                                                                                       time))
+logdir = os.path.join(parsed.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
+                                                                                  optimizer_name, lr, model_name,
+                                                                                  time))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
@@ -82,6 +83,8 @@ if dataset_name == "cityscapes19":
     dataset_name = "cityscapes"
 else:
     cs_19 = False
+if not cs_19:
+    cmap = generate_random_colors()
 
 dataset_train = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
@@ -96,14 +99,12 @@ augmentor = lambda image, label: aug.augment(image, label,
                                              parsed.random_brightness,
                                              parsed.random_contrast,
                                              parsed.random_quality)
-dataset_train = dataset_train.map(augmentor)
-# dataset_test = None
+total_samples = len(list(dataset_train))
+dataset_train = dataset_train.map(augmentor).shard(hvd.size(), hvd.local_rank())
 
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
 assert dataset_validation is not None, "Either test or validation dataset should not be None"
-
-total_samples = len(list(dataset_train))
 
 dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
@@ -160,8 +161,12 @@ curr_step = 0
 
 def write_summary_images(batch, logits):
     tf.summary.image("images", batch[0] / 255, step=curr_step)
-    tf.summary.image("pred", gpu_cs_labels(tf.argmax(logits, axis=-1), cs_19), step=curr_step)
-    tf.summary.image("gt", gpu_cs_labels(batch[1][..., tf.newaxis], cs_19), step=curr_step)
+    if cs_19:
+        tf.summary.image("pred", gpu_cs_labels(tf.argmax(logits, axis=-1), cs_19), step=curr_step)
+        tf.summary.image("gt", gpu_cs_labels(batch[1][..., tf.newaxis], cs_19), step=curr_step)
+    else:
+        tf.summary.image("pred", gpu_random_labels(tf.argmax(logits, axis=-1), cmap), step=curr_step)
+        tf.summary.image("gt", gpu_random_labels(batch[1][..., tf.newaxis], cmap), step=curr_step)
 
 
 mini_batch, train_logits = None, None
@@ -169,8 +174,6 @@ val_mini_batch, val_logits = None, None
 image_write_step = 0
 for epoch in range(1, epochs + 1):
     for step, mini_batch in enumerate(processed_train):
-        if step * batch_size * hvd.size() > total_samples:
-            continue
         with tf.GradientTape() as tape:
             train_logits = model(mini_batch[0])[0]
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
@@ -206,4 +209,5 @@ for epoch in range(1, epochs + 1):
                               step=curr_step)
             if val_mini_batch is not None:
                 write_summary_images(val_mini_batch, val_logits)
-        print("Val Epoch: {}".format(val_loss))
+        print("Val Epoch {}: {}".format(epoch, val_loss))
+    hvd.join()

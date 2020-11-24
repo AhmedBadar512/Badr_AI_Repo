@@ -1,9 +1,9 @@
 import tensorflow as tf
-import multiprocessing as mp
 import numpy as np
 import cv2
 import pathlib
 from citys_visualizer import display
+from visualization_dicts import generate_random_colors
 import tqdm
 import argparse
 
@@ -15,7 +15,7 @@ args.add_argument("--img_dir",
                   help="Path containing the png/jpg files")
 args.add_argument("-m", "--model_dir",
                   type=str,
-                  default="/volumes1/Code/Badr_AI_Repo/Segmentation/runs/logs/cityscapes19_epochs-100_bs-8_Adam_lr-0.0001_bisenet_resnet18_celebamaskhq_20201115-121303012722/bisenet_resnet18_celebamaskhq/15",
+                  default="sample_model/15",
                   help="Path to TF2 saved model dir")
 args.add_argument("-s", "--save_dir",
                   type=str,
@@ -54,7 +54,7 @@ exts = ["*jpg", "*png", "*jpeg"]
 imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 
 
-def infer(im_path):
+def infer(im_path, cmap):
     im = cv2.imread(im_path)[..., ::-1]
     height_old, width_old = im.shape[0:2]
     if not args.no_input_resize:
@@ -70,9 +70,10 @@ def infer(im_path):
     if args.resize_original:
         img = tf.image.resize(img, size=(height_old, width_old))
         seg = tf.image.resize(seg, size=(height_old, width_old), method="nearest")
-    display(img, seg, cs_19=args.cs19, save_dir=save_dir, img_path=im_path)
+    display(img, seg, cs_19=args.cs19, save_dir=save_dir, img_path=im_path, cmap=cmap)
 
 
 if __name__ == "__main__":
+    cmap = generate_random_colors()
     for img_path in tqdm.tqdm(imgs):
-        infer(img_path)
+        infer(img_path, cmap)

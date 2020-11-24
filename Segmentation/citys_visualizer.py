@@ -8,14 +8,12 @@ import numpy as np
 import utils.augment_images as aug
 import os
 
-c_map = vis.generate_random_colors()
 
-
-def display(img_list, seg_list, pred_list=None, cs_19=False, save_dir=None, img_path=None):
+def display(img_list, seg_list, pred_list=None, cs_19=False, save_dir=None, img_path=None, cmap=None):
     if cs_19:
         seg_list = vis.gpu_cs_labels(seg_list, cs_19)
     else:
-        seg_list = vis.gpu_random_labels(seg_list, c_map)
+        seg_list = vis.gpu_random_labels(seg_list, cmp=cmap)
     img_list, seg_list = img_list.numpy(), seg_list.numpy()
     new_img = cv2.hconcat(img_list[..., ::-1])
     new_seg = cv2.hconcat(seg_list[..., ::-1])
@@ -57,7 +55,6 @@ if __name__ == "__main__":
     from utils.create_seg_tfrecords import TFRecordsSeg
     ds_train = TFRecordsSeg(tfrecord_path="/volumes1/train.tfrecords").read_tfrecords()
     ds_val = TFRecordsSeg(tfrecord_path="/volumes1/val.tfrecords").read_tfrecords()
-    # ds_val = tfds.load(name="cityscapes", split='validation', data_dir="/datasets/")
     augmentor = lambda image, label: aug.augment(image, label, True, False, None, True, True, True, True, True)
     ds_train = ds_train.map(augmentor)
     ds_train = ds_train.shuffle(100).batch(4)
@@ -66,9 +63,7 @@ if __name__ == "__main__":
     process = lambda image, label: get_images_custom(image, label, shp=(256, 512), cs_19=cs_19)
 
     ds_train_new = ds_train.map(process).repeat()
-
+    cmap = vis.generate_random_colors()
     for image, segmentation in ds_train_new:
-        # image, segmentation = features
-        print(image.shape, segmentation.shape)
-        display(image, segmentation, cs_19=False, save_dir=None)
+        display(image, segmentation, cs_19=False, save_dir=None, cmap=cmap)
     cv2.destroyAllWindows()
