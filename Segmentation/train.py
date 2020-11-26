@@ -42,6 +42,8 @@ args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save dir
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=256, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=256, help="Size of the shuffle buffer")
+args.add_argument("--aux", action="store_true", default=False, help="Auxiliary losses included if true")
+args.add_argument("--aux_weight", type=float, default=0.25, help="Auxiliary losses included if true")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -54,24 +56,26 @@ args.add_argument("--random_saturation", action="store_true", default=False, hel
 args.add_argument("--random_brightness", action="store_true", default=False, help="Randomly change brightness")
 args.add_argument("--random_contrast", action="store_true", default=False, help="Randomly change contrast")
 args.add_argument("--random_quality", action="store_true", default=False, help="Randomly change jpeg quality")
-parsed = args.parse_args()
+args = args.parse_args()
 
-random_crop_size = (parsed.random_crop_width, parsed.random_crop_height) \
-    if parsed.random_crop_width is not None and parsed.random_crop_height is not None \
+random_crop_size = (args.random_crop_width, args.random_crop_height) \
+    if args.random_crop_width is not None and args.random_crop_height is not None \
     else None
-dataset_name = parsed.dataset
-epochs = parsed.epochs
-batch_size = parsed.batch_size
-classes = parsed.classes
-optimizer_name = parsed.optimizer
-lr = parsed.lr
-momentum = parsed.momentum
-model_name = parsed.model
-log_freq = parsed.logging_freq
-write_image_summary_steps = parsed.write_image_summary_steps
+dataset_name = args.dataset
+aux = args.aux
+aux_weight = args.aux_weight
+epochs = args.epochs
+batch_size = args.batch_size
+classes = args.classes
+optimizer_name = args.optimizer
+lr = args.lr
+momentum = args.momentum
+model_name = args.model
+log_freq = args.logging_freq
+write_image_summary_steps = args.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
-logdir = os.path.join(parsed.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
+logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
                                                                                   optimizer_name, lr, model_name,
                                                                                   time))
 # TODO: Add save option, with a save_dir
@@ -91,14 +95,14 @@ dataset_train = TFRecordsSeg(
 dataset_validation = TFRecordsSeg(
     tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
 augmentor = lambda image, label: aug.augment(image, label,
-                                             parsed.flip_up_down,
-                                             parsed.flip_left_right,
+                                             args.flip_up_down,
+                                             args.flip_left_right,
                                              random_crop_size,
-                                             parsed.random_hue,
-                                             parsed.random_saturation,
-                                             parsed.random_brightness,
-                                             parsed.random_contrast,
-                                             parsed.random_quality)
+                                             args.random_hue,
+                                             args.random_saturation,
+                                             args.random_brightness,
+                                             args.random_contrast,
+                                             args.random_quality)
 total_samples = len(list(dataset_train))
 dataset_train = dataset_train.map(augmentor).shard(hvd.size(), hvd.local_rank())
 
@@ -106,13 +110,13 @@ dataset_train = dataset_train.map(augmentor).shard(hvd.size(), hvd.local_rank())
 assert dataset_train is not None, "Training dataset can not be None"
 assert dataset_validation is not None, "Either test or validation dataset should not be None"
 
-dataset_train = dataset_train.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
+dataset_train = dataset_train.shuffle(args.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
-dataset_validation = dataset_validation.shuffle(parsed.shuffle_buffer).batch(batch_size, drop_remainder=True) \
+dataset_validation = dataset_validation.shuffle(args.shuffle_buffer).batch(batch_size, drop_remainder=True) \
     if (dataset_validation is not None) else None
 
 eval_dataset = dataset_validation
-get_images_processed = lambda image, label: get_images_custom(image, label, (parsed.height, parsed.width), cs_19)
+get_images_processed = lambda image, label: get_images_custom(image, label, (args.height, args.width), cs_19)
 
 processed_train = dataset_train.map(get_images_processed)
 processed_val = dataset_validation.map(get_images_processed)
@@ -151,7 +155,7 @@ def train_step(tape, loss, model, optimizer, filter=None, first_batch=False):
 # =========== Training ============ #
 
 
-model = get_model(model_name, classes=classes, in_size=(parsed.height, parsed.width))
+model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
 if hvd.local_rank() == 0:
     train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
     val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
@@ -176,9 +180,14 @@ image_write_step = 0
 for epoch in range(1, epochs + 1):
     for step, mini_batch in enumerate(processed_train):
         with tf.GradientTape() as tape:
-            train_logits = model(mini_batch[0])[0]
+            train_logits = model(mini_batch[0])
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
-            loss = calc_loss(train_labs, train_logits)
+            if aux:
+                losses = [calc_loss(train_labs, train_logit) if n == 0 else args.aux_weight * calc_loss(train_labs, train_logit) for n, train_logit in enumerate(train_logits)]
+                loss = tf.reduce_sum(losses)
+                train_logits = train_logits[0]
+            else:
+                loss = calc_loss(train_labs, train_logits)
         train_step(tape, loss, model, optimizer, first_batch=(step == 0))
         if hvd.local_rank() == 0:
             # ======== mIoU calculation ==========
@@ -205,12 +214,15 @@ for epoch in range(1, epochs + 1):
     if hvd.local_rank() == 0:
         mIoU.reset_states()
         total_steps += step
-        if epoch % parsed.save_interval == 0:
+        if epoch % args.save_interval == 0:
             tf.saved_model.save(model, os.path.join(logdir, model_name, str(epoch)))
             print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
         total_val_loss = []
         for val_mini_batch in tqdm.tqdm(processed_val):
-            val_logits = model(val_mini_batch[0])[0]
+            if aux:
+                val_logits = model(val_mini_batch[0])[0]
+            else:
+                val_logits = model(val_mini_batch[0])
             val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
             gt = tf.argmax(val_labs)
             pred = tf.argmax(val_logits)
@@ -224,5 +236,5 @@ for epoch in range(1, epochs + 1):
                               step=total_steps)
             if val_mini_batch is not None:
                 write_summary_images(val_mini_batch, val_logits)
-        print("Val Epoch {}: {}".format(epoch, val_loss))
+        print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
     hvd.join()
