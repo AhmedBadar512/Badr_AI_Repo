@@ -40,8 +40,8 @@ args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, he
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
 args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
-args.add_argument("--width", type=int, default=256, help="Size of the shuffle buffer")
-args.add_argument("--height", type=int, default=256, help="Size of the shuffle buffer")
+args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
+args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
 args.add_argument("--aux", action="store_true", default=False, help="Auxiliary losses included if true")
 args.add_argument("--aux_weight", type=float, default=0.25, help="Auxiliary losses included if true")
 # ============ Augmentation Arguments ===================== #
@@ -183,7 +183,7 @@ for epoch in range(1, epochs + 1):
             train_logits = model(mini_batch[0])
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
             if aux:
-                losses = [calc_loss(train_labs, train_logit) if n == 0 else args.aux_weight * calc_loss(train_labs, train_logit) for n, train_logit in enumerate(train_logits)]
+                losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) if n == 0 else args.aux_weight * calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in enumerate(train_logits)]
                 loss = tf.reduce_sum(losses)
                 train_logits = train_logits[0]
             else:
