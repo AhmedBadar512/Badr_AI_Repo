@@ -135,6 +135,6 @@ class UNet(K.Model):
 if __name__ == "__main__":
     x = tf.random.uniform((1, 512, 512, 3))
     unet = UNet(32)
-    unet.build(input_shape=(1, 512, 512, 3))
+    unet.build(input_shape=(None, None, None, 3))
     print(unet.summary())
     print(unet(x).shape)

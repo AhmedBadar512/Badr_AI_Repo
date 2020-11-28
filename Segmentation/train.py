@@ -29,7 +29,7 @@ args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
 args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
-args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select optimizer",
+args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select learning rate scheduler",
                   choices=["poly", "exp_decay"])
 args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
@@ -40,6 +40,9 @@ args.add_argument("-si", "--save_interval", type=int, default=5, help="Save inte
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
+args.add_argument("-l_m", "--load_model", type=str,
+                  default=None,
+                  help="Load model from path")
 args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=1024, help="Size of the shuffle buffer")
@@ -78,8 +81,8 @@ write_image_summary_steps = args.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                  optimizer_name, lr, model_name,
-                                                                                  time))
+                                                                                optimizer_name, lr, model_name,
+                                                                                time))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
@@ -131,9 +134,11 @@ if args.lr_scheduler == "poly":
                                                                  end_learning_rate=1e-12,
                                                                  power=0.9)
 elif args.lr_scheduler == "exp_decay":
-    tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr,
-                                                   decay_steps=epochs * total_samples // batch_size,
-                                                   decay_rate=0.9)
+    lr_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr,
+                                                                  decay_steps=epochs * total_samples // batch_size,
+                                                                  decay_rate=0.9)
+else:
+    lr_scheduler = lr
 
 if optimizer_name == "Adam":
     optimizer = K.optimizers.Adam(learning_rate=lr_scheduler)
@@ -166,6 +171,10 @@ def train_step(tape, loss, model, optimizer, filter=None, first_batch=False):
 
 
 model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
+if args.load_model:
+    pretrained_model = K.models.load_model(args.load_model)
+    model.set_weights(pretrained_model.get_weights())
+    print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
 if hvd.local_rank() == 0:
     train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
     val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
@@ -193,7 +202,10 @@ for epoch in range(1, epochs + 1):
             train_logits = model(mini_batch[0])
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
             if aux:
-                losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) if n == 0 else args.aux_weight * calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in enumerate(train_logits)]
+                losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
+                                                                                  1:3])) if n == 0 else args.aux_weight * calc_loss(
+                    train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
+                          enumerate(train_logits)]
                 loss = tf.reduce_sum(losses)
                 train_logits = train_logits[0]
             else:
@@ -225,7 +237,7 @@ for epoch in range(1, epochs + 1):
         mIoU.reset_states()
         total_steps += step
         if epoch % args.save_interval == 0:
-            tf.saved_model.save(model, os.path.join(logdir, model_name, str(epoch)))
+            K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
             print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
         total_val_loss = []
         for val_mini_batch in tqdm.tqdm(processed_val):
