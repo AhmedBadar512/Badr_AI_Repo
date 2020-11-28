@@ -99,6 +99,7 @@ from models.lffd import *
 
 from models.voca import *
 from models.nvpattexp import *
+from models.unet import *
 
 __all__ = ['get_model']
 
@@ -863,6 +864,7 @@ _models = {
 
     'voca8flame': voca8flame,
     'nvpattexp116bazel76': nvpattexp116bazel76,
+    'unet': UNet
 }
 
 

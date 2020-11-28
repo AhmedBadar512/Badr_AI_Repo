@@ -29,18 +29,20 @@ args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
 args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
+args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select optimizer",
+                  choices=["poly", "exp_decay"])
 args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-l", "--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
-args.add_argument("-bs", "--batch_size", type=int, default=8, help="Size of mini-batch")
+args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
 args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
-args.add_argument("--width", type=int, default=512, help="Size of the shuffle buffer")
+args.add_argument("--width", type=int, default=1024, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
 args.add_argument("--aux", action="store_true", default=False, help="Auxiliary losses included if true")
 args.add_argument("--aux_weight", type=float, default=0.25, help="Auxiliary losses included if true")
@@ -74,7 +76,7 @@ model_name = args.model
 log_freq = args.logging_freq
 write_image_summary_steps = args.write_image_summary_steps
 time = str(datetime.datetime.now())
-time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")
+time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
                                                                                   optimizer_name, lr, model_name,
                                                                                   time))
@@ -123,8 +125,16 @@ processed_val = dataset_validation.map(get_images_processed)
 # =========== Optimizer and Training Setup ============ #
 # lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
 #                                                                     [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
-lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(initial_learning_rate=lr, decay_steps=1e6,
-                                                             end_learning_rate=1e-8, power=0.9)
+if args.lr_scheduler == "poly":
+    lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(initial_learning_rate=lr,
+                                                                 decay_steps=epochs * total_samples // batch_size,
+                                                                 end_learning_rate=1e-12,
+                                                                 power=0.9)
+elif args.lr_scheduler == "exp_decay":
+    tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr,
+                                                   decay_steps=epochs * total_samples // batch_size,
+                                                   decay_rate=0.9)
+
 if optimizer_name == "Adam":
     optimizer = K.optimizers.Adam(learning_rate=lr_scheduler)
 elif optimizer_name == "RMSProp":

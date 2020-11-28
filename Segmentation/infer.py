@@ -49,7 +49,8 @@ width, height = args.width, args.height
 img_dir = args.img_dir
 path = args.model_dir
 save_dir = args.save_dir
-imported = tf.saved_model.load(path)
+# imported = tf.saved_model.load(path)
+imported = tf.keras.models.load_model(path)
 exts = ["*jpg", "*png", "*jpeg"]
 imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 
