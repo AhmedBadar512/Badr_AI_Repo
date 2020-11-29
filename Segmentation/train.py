@@ -80,9 +80,11 @@ log_freq = args.logging_freq
 write_image_summary_steps = args.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr-{}_{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                optimizer_name, lr, model_name,
-                                                                                time))
+logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr_{}-{}_{}_{}".format(dataset_name, epochs, batch_size,
+                                                                                   optimizer_name, lr,
+                                                                                   args.lr_scheduler,
+                                                                                   model_name,
+                                                                                   time))
 # TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
@@ -147,8 +149,6 @@ elif optimizer_name == "RMSProp":
 else:
     optimizer = K.optimizers.SGD(learning_rate=lr_scheduler, momentum=momentum)
 
-train_metrics = [tf.keras.metrics.Accuracy()]
-val_metrics = [tf.keras.metrics.Accuracy()]
 total_steps = 0
 step = 0
 curr_step = 0
@@ -172,9 +172,13 @@ def train_step(tape, loss, model, optimizer, filter=None, first_batch=False):
 
 model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
 if args.load_model:
-    pretrained_model = K.models.load_model(args.load_model)
-    model.set_weights(pretrained_model.get_weights())
-    print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
+    if os.path.exists(os.path.join(args.load_model, "saved_model.pb")):
+        pretrained_model = K.models.load_model(args.load_model)
+        model.build(input_shape=(None, None, None, 3))
+        model.set_weights(pretrained_model.get_weights())
+        print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
+    else:
+        print("No file found at {}".format(os.path.join(args.load_model, "saved_model.pb")))
 if hvd.local_rank() == 0:
     train_writer = tf.summary.create_file_writer(os.path.join(logdir, "train"))
     val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
@@ -214,8 +218,8 @@ for epoch in range(1, epochs + 1):
         if hvd.local_rank() == 0:
             # ======== mIoU calculation ==========
             mIoU.reset_states()
-            gt = tf.argmax(train_labs)
-            pred = tf.argmax(train_logits)
+            gt = tf.reshape(tf.argmax(train_labs, axis=-1), -1)
+            pred = tf.reshape(tf.argmax(train_logits, axis=-1), -1)
             mIoU.update_state(gt, pred)
             # ====================================
             print("Epoch {}: {}/{}, Loss: {}, mIoU: {}".format(epoch, step * batch_size * hvd.size(), total_samples,
@@ -229,12 +233,17 @@ for epoch in range(1, epochs + 1):
                     tf.summary.scalar("mIoU", mIoU.result().numpy(),
                                       step=curr_step)
                     if mini_batch is not None and (step % write_image_summary_steps == 0):
+                        conf_matrix = tf.math.confusion_matrix(gt, pred,
+                                                               num_classes=classes)
+                        conf_matrix = conf_matrix / tf.reduce_sum(conf_matrix, axis=0)
+                        tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
                         write_summary_images(mini_batch, train_logits)
             with train_writer.as_default():
                 tmp = lr_scheduler(step=total_steps)
                 tf.summary.scalar("Learning Rate", tmp, curr_step)
     if hvd.local_rank() == 0:
         mIoU.reset_states()
+        conf_matrix = None
         total_steps += step
         if epoch % args.save_interval == 0:
             K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
@@ -246,10 +255,14 @@ for epoch in range(1, epochs + 1):
             else:
                 val_logits = model(val_mini_batch[0])
             val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
-            gt = tf.argmax(val_labs)
-            pred = tf.argmax(val_logits)
+            gt = tf.reshape(tf.argmax(val_labs, axis=-1), -1)
+            pred = tf.reshape(tf.argmax(val_logits, axis=-1), -1)
             mIoU.update_state(gt, pred)
             total_val_loss.append(calc_loss(val_labs, val_logits))
+            if conf_matrix is None:
+                conf_matrix = tf.math.confusion_matrix(gt, pred, num_classes=classes)
+            else:
+                conf_matrix += tf.math.confusion_matrix(gt, pred, num_classes=classes)
         val_loss = tf.reduce_mean(total_val_loss)
         with val_writer.as_default():
             tf.summary.scalar("loss", val_loss,
@@ -257,6 +270,8 @@ for epoch in range(1, epochs + 1):
             tf.summary.scalar("mIoU", mIoU.result().numpy(),
                               step=total_steps)
             if val_mini_batch is not None:
+                conf_matrix /= tf.reduce_sum(conf_matrix, axis=0)
+                tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=total_steps)
                 write_summary_images(val_mini_batch, val_logits)
         print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
     hvd.join()
