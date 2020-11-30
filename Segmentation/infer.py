@@ -6,8 +6,28 @@ from citys_visualizer import display
 from visualization_dicts import generate_random_colors
 import tqdm
 import argparse
+import os
+from model_provider import get_model
 
-# TODO: Add model loading
+DATASET_DICT = {"cityscapes19": 19, "cityscapes": 34}
+
+
+def load_model_dynamic(pretrained_model_path, curr_model):
+    if os.path.exists(os.path.join(pretrained_model_path, "saved_model.pb")):
+        pretrained_model = tf.keras.models.load_model(pretrained_model_path)
+        curr_model.build(input_shape=(None, None, None, 3))
+        curr_model.set_weights(pretrained_model.get_weights())
+        print("Model loaded from {} successfully".format(os.path.basename(pretrained_model_path)))
+    else:
+        print("No file found at {}".format(os.path.join(pretrained_model_path, "saved_model.pb")))
+
+
+def get_model_props(pretrained_model_path):
+    name = pretrained_model_path.split("/")[-2]
+    dataset_name = pretrained_model_path.split("/")[-3].split("_")[0]
+    return name, dataset_name
+
+
 args = argparse.ArgumentParser(description="Infer with a given Checkpoint")
 args.add_argument("--img_dir",
                   type=str,
@@ -33,8 +53,8 @@ args.add_argument("--width",
                   type=int,
                   default=1024,
                   help="Path to TF2 saved model dir")
-args.add_argument("-nir",
-                  "--no_input_resize",
+args.add_argument("-ir",
+                  "--input_resize",
                   action="store_true",
                   default=False,
                   help="If true input images are not resized")
@@ -49,8 +69,15 @@ width, height = args.width, args.height
 img_dir = args.img_dir
 path = args.model_dir
 save_dir = args.save_dir
-# imported = tf.saved_model.load(path)
-imported = tf.keras.models.load_model(path)
+# model = tf.saved_model.load(path)
+# model = tf.keras.models.load_model(path)
+model_name, dataset_name = get_model_props(args.model_dir)
+if args.input_resize:
+    model = tf.keras.models.load_model(path)
+else:
+    model = get_model(model_name, classes=DATASET_DICT[dataset_name])
+
+    load_model_dynamic(args.model_dir, model)
 exts = ["*jpg", "*png", "*jpeg"]
 imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 
@@ -58,10 +85,10 @@ imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 def infer(im_path, cmap):
     im = cv2.imread(im_path)[..., ::-1]
     height_old, width_old = im.shape[0:2]
-    if not args.no_input_resize:
+    if args.input_resize:
         im = cv2.resize(im, (width, height))
     img = tf.constant(im.astype(np.float32))
-    outputs = imported(img[np.newaxis], False)
+    outputs = model(img[np.newaxis], False)
     if type(outputs) is list or type(outputs) is tuple:
         seg = tf.argmax(outputs[0], axis=-1)
     else:
