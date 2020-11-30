@@ -71,11 +71,11 @@ path = args.model_dir
 save_dir = args.save_dir
 # model = tf.saved_model.load(path)
 # model = tf.keras.models.load_model(path)
-model_name, dataset_name = get_model_props(args.model_dir)
+model_name, ds_name = get_model_props(args.model_dir)
 if args.input_resize:
     model = tf.keras.models.load_model(path)
 else:
-    model = get_model(model_name, classes=DATASET_DICT[dataset_name])
+    model = get_model(model_name, classes=DATASET_DICT[ds_name])
 
     load_model_dynamic(args.model_dir, model)
 exts = ["*jpg", "*png", "*jpeg"]
