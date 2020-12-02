@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as K
+import tensorflow_probability as tfp
 
 
 class UNet(K.Model):
@@ -10,6 +11,8 @@ class UNet(K.Model):
                  in_size=(512, 512),
                  classes=21,
                  aux=False,
+                 variational=False,
+                 activation='relu',
                  **kwargs):
         super().__init__(**kwargs)
         assert (in_channels > 0)
@@ -20,34 +23,47 @@ class UNet(K.Model):
         self.fixed_size = fixed_size
         self.in_conv = K.layers.Conv2D(base_channels,
                                        3,
-                                       activation='relu',
+                                       activation=activation,
                                        padding='same',
                                        kernel_initializer='he_normal')
         self.conv1 = [K.layers.Conv2D(base_channels,
                                       3,
-                                      activation='relu',
+                                      activation=activation,
                                       padding='same',
                                       kernel_initializer='he_normal') for _ in range(3)]
         self.conv2 = [K.layers.Conv2D(base_channels * 2,
                                       3,
-                                      activation='relu',
+                                      activation=activation,
                                       padding='same',
                                       kernel_initializer='he_normal') for _ in range(4)]
         self.conv3 = [K.layers.Conv2D(base_channels * 4,
                                       3,
-                                      activation='relu',
+                                      activation=activation,
                                       padding='same',
                                       kernel_initializer='he_normal') for _ in range(4)]
         self.conv4 = [K.layers.Conv2D(base_channels * 8,
                                       3,
-                                      activation='relu',
+                                      activation=activation,
                                       padding='same',
                                       kernel_initializer='he_normal') for _ in range(4)]
-        self.conv5 = [K.layers.Conv2D(base_channels * 16,
-                                      3,
-                                      activation='relu',
-                                      padding='same',
-                                      kernel_initializer='he_normal') for _ in range(2)]
+        if variational:
+            self.conv5 = [K.layers.Conv2D(base_channels * 16,
+                                          3,
+                                          activation=activation,
+                                          padding='same',
+                                          kernel_initializer='he_normal') for _ in range(2)]
+        else:
+            self.conv5 = [tfp.layers.Convolution2DFlipout(base_channels * 16,
+                                                          3,
+                                                          activation=activation,
+                                                          padding='same',
+                                                          kernel_initializer='he_normal'),
+                          K.layers.Conv2D(base_channels * 16,
+                                          3,
+                                          activation=activation,
+                                          padding='same',
+                                          kernel_initializer='he_normal')
+                          ]
         self.dropout1 = K.layers.Dropout(0.1)
         self.dropout2 = K.layers.Dropout(0.2)
         self.dropout3 = K.layers.Dropout(0.3)
