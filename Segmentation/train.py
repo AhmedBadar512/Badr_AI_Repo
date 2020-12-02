@@ -170,7 +170,7 @@ def train_step(tape, loss, model, optimizer, filter=None, first_batch=False):
 # =========== Training ============ #
 
 
-model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux, variational=True)
+model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
 if args.load_model:
     if os.path.exists(os.path.join(args.load_model, "saved_model.pb")):
         pretrained_model = K.models.load_model(args.load_model)
@@ -203,9 +203,6 @@ image_write_step = 0
 for epoch in range(1, epochs + 1):
     for step, mini_batch in enumerate(processed_train):
         with tf.GradientTape() as tape:
-            for trainable_var in model.trainable_variables:
-                if "kernel_posterior_untransformed_scale" in trainable_var.name:
-                    trainable_var /= loss
             train_logits = model(mini_batch[0])
             train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
             if aux:
