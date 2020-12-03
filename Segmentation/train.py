@@ -44,6 +44,7 @@ args.add_argument("-l_m", "--load_model", type=str,
                   default=None,
                   help="Load model from path")
 args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
+args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_segmentation_tfrecords", help="Save directory that contains train and validation tfrecords")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=1024, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
@@ -98,9 +99,11 @@ if not cs_19:
     cmap = generate_random_colors()
 
 dataset_train = TFRecordsSeg(
-    tfrecord_path="/volumes1/tfrecords_dir/{}_train.tfrecords".format(dataset_name)).read_tfrecords()
+    tfrecord_path=
+    "{}/{}_train.tfrecords".format(args.tf_record_path, dataset_name)).read_tfrecords()
 dataset_validation = TFRecordsSeg(
-    tfrecord_path="/volumes1/tfrecords_dir/{}_val.tfrecords".format(dataset_name)).read_tfrecords()
+    tfrecord_path=
+    "{}/{}_val.tfrecords".format(args.tf_record_path, dataset_name)).read_tfrecords()
 augmentor = lambda image, label: aug.augment(image, label,
                                              args.flip_up_down,
                                              args.flip_left_right,
