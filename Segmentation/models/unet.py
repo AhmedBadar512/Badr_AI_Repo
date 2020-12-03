@@ -46,18 +46,18 @@ class UNet(K.Model):
                                       activation=activation,
                                       padding='same',
                                       kernel_initializer='he_normal') for _ in range(4)]
-        if variational:
+        if not variational:
             self.conv5 = [K.layers.Conv2D(base_channels * 16,
                                           3,
                                           activation=activation,
                                           padding='same',
                                           kernel_initializer='he_normal') for _ in range(2)]
         else:
-            self.conv5 = [tfp.layers.Convolution2DFlipout(base_channels * 16,
-                                                          3,
-                                                          activation=activation,
-                                                          padding='same',
-                                                          kernel_initializer='he_normal'),
+            self.conv5 = [tfp.layers.Convolution2DReparameterization(base_channels * 16,
+                                                                     3,
+                                                                     activation=activation,
+                                                                     padding='same',
+                                                                     kernel_initializer='he_normal'),
                           K.layers.Conv2D(base_channels * 16,
                                           3,
                                           activation=activation,
