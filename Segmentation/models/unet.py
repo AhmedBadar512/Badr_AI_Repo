@@ -1,200 +1,156 @@
-from typing import Optional, Union, Callable
-
-import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Model, Input
-from tensorflow.keras import layers
-from tensorflow.keras.initializers import TruncatedNormal
+import tensorflow.keras as K
+import tensorflow_probability as tfp
 
 
-class ConvBlock(layers.Layer):
+class UNet(K.Model):
+    def __init__(self,
+                 base_channels=32,
+                 fixed_size=False,
+                 in_channels=3,
+                 in_size=(512, 512),
+                 classes=21,
+                 aux=False,
+                 variational=False,
+                 activation='relu',
+                 **kwargs):
+        super().__init__(**kwargs)
+        assert (in_channels > 0)
+        assert ((in_size[0] % 32 == 0) and (in_size[1] % 32 == 0))
+        self.base_channels = base_channels
+        self.in_size = in_size
+        self.classes = classes
+        self.fixed_size = fixed_size
+        self.in_conv = K.layers.Conv2D(base_channels,
+                                       3,
+                                       activation=activation,
+                                       padding='same',
+                                       kernel_initializer='he_normal')
+        self.conv1 = [K.layers.Conv2D(base_channels,
+                                      3,
+                                      activation=activation,
+                                      padding='same',
+                                      kernel_initializer='he_normal') for _ in range(3)]
+        self.conv2 = [K.layers.Conv2D(base_channels * 2,
+                                      3,
+                                      activation=activation,
+                                      padding='same',
+                                      kernel_initializer='he_normal') for _ in range(4)]
+        self.conv3 = [K.layers.Conv2D(base_channels * 4,
+                                      3,
+                                      activation=activation,
+                                      padding='same',
+                                      kernel_initializer='he_normal') for _ in range(4)]
+        self.conv4 = [K.layers.Conv2D(base_channels * 8,
+                                      3,
+                                      activation=activation,
+                                      padding='same',
+                                      kernel_initializer='he_normal') for _ in range(4)]
+        if not variational:
+            self.conv5 = [K.layers.Conv2D(base_channels * 16,
+                                          3,
+                                          activation=activation,
+                                          padding='same',
+                                          kernel_initializer='he_normal') for _ in range(2)]
+        else:
+            self.conv5 = [tfp.layers.Convolution2DReparameterization(base_channels * 16,
+                                                                     3,
+                                                                     activation=activation,
+                                                                     padding='same',
+                                                                     kernel_initializer='he_normal'),
+                          K.layers.Conv2D(base_channels * 16,
+                                          3,
+                                          activation=activation,
+                                          padding='same',
+                                          kernel_initializer='he_normal')
+                          ]
+        self.dropout1 = K.layers.Dropout(0.1)
+        self.dropout2 = K.layers.Dropout(0.2)
+        self.dropout3 = K.layers.Dropout(0.3)
+        self.pool = K.layers.MaxPool2D(pool_size=(2, 2))
+        self.bn = []
+        for _ in range(18):
+            self.bn.append(K.layers.BatchNormalization())
+        self.up6 = K.layers.Conv2DTranspose(base_channels * 8, (3, 3), strides=(2, 2), padding="same")
+        self.up7 = K.layers.Conv2DTranspose(base_channels * 4, (3, 3), strides=(2, 2), padding="same")
+        self.up8 = K.layers.Conv2DTranspose(base_channels * 2, (3, 3), strides=(2, 2), padding="same")
+        self.up9 = K.layers.Conv2DTranspose(base_channels, (3, 3), strides=(2, 2), padding="same")
+        self.conv10 = K.layers.Conv2D(classes, 1, strides=1, padding="same")
 
-    def __init__(self, layer_idx, filters_root, kernel_size, dropout_rate, padding, activation, **kwargs):
-        super(ConvBlock, self).__init__(**kwargs)
-        self.layer_idx = layer_idx
-        self.filters_root = filters_root
-        self.kernel_size = kernel_size
-        self.dropout_rate = dropout_rate
-        self.padding = padding
-        self.activation = activation
+    def call(self, inputs, training=None, mask=None):
+        c1 = self.in_conv(inputs)
+        c1 = self.bn[0](c1)
+        c1 = self.dropout1(c1)
+        c1 = self.conv1[0](c1)
+        c1 = self.bn[1](c1)
+        p1 = self.pool(c1)
 
-        filters = _get_filter_count(layer_idx, filters_root)
-        self.conv2d_1 = layers.Conv2D(filters=filters,
-                                      kernel_size=(kernel_size, kernel_size),
-                                      kernel_initializer=_get_kernel_initializer(filters, kernel_size),
-                                      strides=1,
-                                      padding=padding)
-        self.dropout_1 = layers.Dropout(rate=dropout_rate)
-        self.activation_1 = layers.Activation(activation)
+        c2 = self.conv2[0](p1)
+        c2 = self.bn[2](c2)
+        c2 = self.dropout1(c2)
+        c2 = self.conv2[1](c2)
+        c2 = self.bn[3](c2)
+        p2 = self.pool(c2)
 
-        self.conv2d_2 = layers.Conv2D(filters=filters,
-                                      kernel_size=(kernel_size, kernel_size),
-                                      kernel_initializer=_get_kernel_initializer(filters, kernel_size),
-                                      strides=1,
-                                      padding=padding)
-        self.dropout_2 = layers.Dropout(rate=dropout_rate)
-        self.activation_2 = layers.Activation(activation)
+        c3 = self.conv3[0](p2)
+        c3 = self.bn[4](c3)
+        c3 = self.dropout2(c3)
+        c3 = self.conv3[1](c3)
+        c3 = self.bn[5](c3)
+        p3 = self.pool(c3)
 
-    def call(self, inputs, training=None, **kwargs):
-        x = inputs
-        x = self.conv2d_1(x)
+        c4 = self.conv4[0](p3)
+        c4 = self.bn[6](c4)
+        c4 = self.dropout2(c4)
+        c4 = self.conv4[1](c4)
+        c4 = self.bn[7](c4)
+        p4 = self.pool(c4)
 
-        if training:
-            x = self.dropout_1(x)
-        x = self.activation_1(x)
-        x = self.conv2d_2(x)
+        c5 = self.conv5[0](p4)
+        c5 = self.bn[8](c5)
+        c5 = self.dropout3(c5)
+        c5 = self.conv5[1](c5)
+        c5 = self.bn[9](c5)
 
-        if training:
-            x = self.dropout_2(x)
+        u6 = self.up6(c5)
+        u6 = K.layers.concatenate([u6, c4])
+        c6 = self.conv4[2](u6)
+        c6 = self.bn[10](c6)
+        c6 = self.dropout2(c6)
+        c6 = self.conv4[3](c6)
+        c6 = self.bn[11](c6)
 
-        x = self.activation_2(x)
-        return x
+        u7 = self.up7(c6)
+        u7 = K.layers.concatenate([u7, c3])
+        c7 = self.conv3[2](u7)
+        c7 = self.bn[12](c7)
+        c7 = self.dropout2(c7)
+        c7 = self.conv3[3](c7)
+        c7 = self.bn[13](c7)
 
-    def get_config(self):
-        return dict(layer_idx=self.layer_idx,
-                    filters_root=self.filters_root,
-                    kernel_size=self.kernel_size,
-                    dropout_rate=self.dropout_rate,
-                    padding=self.padding,
-                    activation=self.activation,
-                    **super(ConvBlock, self).get_config(),
-                    )
+        u8 = self.up8(c7)
+        u8 = K.layers.concatenate([u8, c2])
+        c8 = self.conv2[2](u8)
+        c8 = self.bn[14](c8)
+        c8 = self.dropout1(c8)
+        c8 = self.conv2[3](c8)
+        c8 = self.bn[15](c8)
 
+        u9 = self.up9(c8)
+        u9 = K.layers.concatenate([u9, c1])
+        c9 = self.conv1[1](u9)
+        c9 = self.bn[16](c9)
+        c9 = self.dropout1(c9)
+        c9 = self.conv1[2](c9)
+        c9 = self.bn[17](c9)
 
-class UpconvBlock(layers.Layer):
-
-    def __init__(self, layer_idx, filters_root, kernel_size, pool_size, padding, activation, **kwargs):
-        super(UpconvBlock, self).__init__(**kwargs)
-        self.layer_idx = layer_idx
-        self.filters_root = filters_root
-        self.kernel_size = kernel_size
-        self.pool_size = pool_size
-        self.padding = padding
-        self.activation = activation
-
-        filters = _get_filter_count(layer_idx + 1, filters_root)
-        self.upconv = layers.Conv2DTranspose(filters // 2,
-                                             kernel_size=(pool_size, pool_size),
-                                             kernel_initializer=_get_kernel_initializer(filters, kernel_size),
-                                             strides=pool_size, padding=padding)
-
-        self.activation_1 = layers.Activation(activation)
-
-    def call(self, inputs, **kwargs):
-        x = inputs
-        x = self.upconv(x)
-        x = self.activation_1(x)
-        return x
-
-    def get_config(self):
-        return dict(layer_idx=self.layer_idx,
-                    filters_root=self.filters_root,
-                    kernel_size=self.kernel_size,
-                    pool_size=self.pool_size,
-                    padding=self.padding,
-                    activation=self.activation,
-                    **super(UpconvBlock, self).get_config(),
-                    )
-
-
-class CropConcatBlock(layers.Layer):
-
-    def call(self, x, down_layer, **kwargs):
-        x1_shape = tf.shape(down_layer)
-        x2_shape = tf.shape(x)
-
-        height_diff = (x1_shape[1] - x2_shape[1]) // 2
-        width_diff = (x1_shape[2] - x2_shape[2]) // 2
-
-        down_layer_cropped = down_layer[:,
-                             height_diff: (x1_shape[1] - height_diff),
-                             width_diff: (x1_shape[2] - width_diff),
-                             :]
-
-        x = tf.concat([down_layer_cropped, x], axis=-1)
-        return x
-
-
-def build_model(nx: Optional[int] = None,
-                ny: Optional[int] = None,
-                channels: int = 1,
-                num_classes: int = 2,
-                layer_depth: int = 5,
-                filters_root: int = 32,
-                kernel_size: int = 3,
-                pool_size: int = 2,
-                dropout_rate: int = 0.5,
-                padding: str = "same",
-                activation: Union[str, Callable] = "relu") -> Model:
-    """
-    Constructs a U-Net model
-    :param nx: (Optional) image size on x-axis
-    :param ny: (Optional) image size on y-axis
-    :param channels: number of channels of the input tensors
-    :param num_classes: number of classes
-    :param layer_depth: total depth of unet
-    :param filters_root: number of filters in top unet layer
-    :param kernel_size: size of convolutional layers
-    :param pool_size: size of maxplool layers
-    :param dropout_rate: rate of dropout
-    :param padding: padding to be used in convolutions
-    :param activation: activation to be used
-    :return: A TF Keras model
-    """
-
-    inputs = Input(shape=(nx, ny, channels), name="inputs")
-
-    x = inputs
-    contracting_layers = {}
-
-    conv_params = dict(filters_root=filters_root,
-                       kernel_size=kernel_size,
-                       dropout_rate=dropout_rate,
-                       padding=padding,
-                       activation=activation)
-
-    for layer_idx in range(0, layer_depth - 1):
-        x = ConvBlock(layer_idx, **conv_params)(x)
-        contracting_layers[layer_idx] = x
-        x = layers.MaxPooling2D((pool_size, pool_size))(x)
-
-    x = ConvBlock(layer_idx + 1, **conv_params)(x)
-
-    for layer_idx in range(layer_idx, -1, -1):
-        x = UpconvBlock(layer_idx,
-                        filters_root,
-                        kernel_size,
-                        pool_size,
-                        padding,
-                        activation)(x)
-        x = CropConcatBlock()(x, contracting_layers[layer_idx])
-        x = ConvBlock(layer_idx, **conv_params)(x)
-
-    x = layers.Conv2D(filters=num_classes,
-                      kernel_size=(1, 1),
-                      kernel_initializer=_get_kernel_initializer(filters_root, kernel_size),
-                      strides=1,
-                      padding=padding)(x)
-
-    x = layers.Activation(activation)(x)
-    outputs = layers.Activation("softmax", name="outputs")(x)
-    model = Model(inputs, outputs, name="unet")
-
-    return model
-
-
-def _get_filter_count(layer_idx, filters_root):
-    return 2 ** layer_idx * filters_root
-
-
-def _get_kernel_initializer(filters, kernel_size):
-    stddev = np.sqrt(2 / (kernel_size ** 2 * filters))
-    return TruncatedNormal(stddev=stddev)
+        final = self.conv10(c9)
+        return final
 
 
 if __name__ == "__main__":
-    physical_devices = tf.config.experimental.list_physical_devices("GPU")
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    unet = build_model(channels=3, num_classes=19)
-    a = np.random.rand(8, 512, 1024, 3)
-    print(unet(a).shape)
+    x = tf.random.uniform((1, 512, 512, 3))
+    unet = UNet(32)
+    unet.build(input_shape=(None, None, None, 3))
+    print(unet.summary())
+    print(unet(x).shape)

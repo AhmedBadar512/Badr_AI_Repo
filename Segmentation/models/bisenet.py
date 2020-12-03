@@ -12,8 +12,6 @@ import tensorflow.keras.layers as nn
 from .common import conv1x1, conv1x1_block, conv3x3_block, InterpolationBlock, MultiOutputSequential, get_channel_axis,\
     get_im_size, is_channels_first
 from .resnet import resnet18
-physical_devices = tf.config.experimental.list_physical_devices("GPU")
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
 class PyramidPoolingZeroBranch(nn.Layer):
@@ -403,7 +401,7 @@ class BiSeNet(tf.keras.Model):
         assert is_channels_first(self.data_format) or ((x.shape[1] % 32 == 0) and (x.shape[2] % 32 == 0))
         assert (not is_channels_first(self.data_format)) or ((x.shape[2] % 32 == 0) and (x.shape[3] % 32 == 0))
 
-        x8, x16, x32 = self.backbone(x, training=training)
+        x8, x16, x32, x64 = self.backbone(x, training=training)
         z8, y8, y16 = self.pool(x8, x16, x32, training=training)
 
         z8 = self.head_z8(z8, training=training)
@@ -454,8 +452,11 @@ def get_bisenet(model_name=None,
     return net
 
 
-def bisenet_resnet18(pretrained_backbone=True, classes=32, **kwargs):
+def bisenet_resnet18_celebamaskhq(pretrained_backbone=False, classes=19, **kwargs):
     """
+    BiSeNet model on the base of ResNet-18 for face segmentation on CelebAMask-HQ from 'BiSeNet: Bilateral Segmentation
+    Network for Real-time Semantic Segmentation,' https://arxiv.org/abs/1808.00897.
+
     Parameters:
     ----------
     pretrained_backbone : bool, default False
@@ -469,7 +470,7 @@ def bisenet_resnet18(pretrained_backbone=True, classes=32, **kwargs):
     """
     def backbone(**bb_kwargs):
         features_raw = resnet18(pretrained=pretrained_backbone, **bb_kwargs).features
-        features_raw._layers.pop()
+        features_raw._layers = features_raw._layers[0]
         features = MultiOutputSequential(return_last=False, name="backbone")
         features.add(features_raw._layers[0])
         for i, stage in enumerate(features_raw._layers[1:]):
@@ -478,7 +479,7 @@ def bisenet_resnet18(pretrained_backbone=True, classes=32, **kwargs):
             features.add(stage)
         out_channels = [128, 256, 512]
         return features, out_channels
-    return get_bisenet(backbone=backbone, classes=classes, model_name="bisenet_resnet18", **kwargs)
+    return get_bisenet(backbone=backbone, classes=classes, model_name="bisenet_resnet18_celebamaskhq", **kwargs)
 
 
 def _test():
@@ -487,12 +488,12 @@ def _test():
 
     data_format = "channels_last"
     # data_format = "channels_first"
-    in_size = (1024, 512)
+    in_size = (640, 480)
     aux = True
     pretrained = False
 
     models = [
-        bisenet_resnet18,
+        bisenet_resnet18_celebamaskhq,
     ]
 
     for model in models:
@@ -513,14 +514,10 @@ def _test():
         weight_count = sum([np.prod(K.get_value(w).shape) for w in net.trainable_weights])
         print("m={}, {}".format(model.__name__, weight_count))
         if aux:
-            assert (model != bisenet_resnet18 or weight_count == 13300416)
+            assert (model != bisenet_resnet18_celebamaskhq or weight_count == 13300416)
         else:
-            assert (model != bisenet_resnet18 or weight_count == 13150272)
+            assert (model != bisenet_resnet18_celebamaskhq or weight_count == 13150272)
 
 
 if __name__ == "__main__":
-    import numpy as np
-    bisenet = bisenet_resnet18(in_size=(512, 1024), aux=False)
-    a = np.random.rand(2, 512, 1024, 3)
-    x = bisenet(a)
     _test()
