@@ -864,7 +864,8 @@ _models = {
 
     'voca8flame': voca8flame,
     'nvpattexp116bazel76': nvpattexp116bazel76,
-    'unet': UNet
+    'unet': UNet,
+    'vunet': VUNet
 }
 
 
