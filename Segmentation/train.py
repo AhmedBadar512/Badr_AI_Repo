@@ -14,6 +14,7 @@ import utils.augment_images as aug
 import tqdm
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '5'
+print("\n\n\n\n ==============Updated=========== \n\n\n\n")
 hvd.init()
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 for physical_device in physical_devices:
