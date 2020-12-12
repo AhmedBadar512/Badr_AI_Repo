@@ -50,6 +50,7 @@ args.add_argument("--width", type=int, default=1024, help="Size of the shuffle b
 args.add_argument("--height", type=int, default=512, help="Size of the shuffle buffer")
 args.add_argument("--aux", action="store_true", default=False, help="Auxiliary losses included if true")
 args.add_argument("--aux_weight", type=float, default=0.25, help="Auxiliary losses included if true")
+args.add_argument("--random_seed", type=int, default=1, help="Set random seed to this if true")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -64,6 +65,8 @@ args.add_argument("--random_contrast", action="store_true", default=False, help=
 args.add_argument("--random_quality", action="store_true", default=False, help="Randomly change jpeg quality")
 args = args.parse_args()
 
+
+tf.random.set_seed(args.random_seed)
 random_crop_size = (args.random_crop_width, args.random_crop_height) \
     if args.random_crop_width is not None and args.random_crop_height is not None \
     else None
