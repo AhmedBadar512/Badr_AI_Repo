@@ -89,7 +89,6 @@ logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr_{}-{}_{}_{}".form
                                                                                    args.lr_scheduler,
                                                                                    model_name,
                                                                                    time))
-# TODO: Add save option, with a save_dir
 
 # =========== Load Dataset ============ #
 
