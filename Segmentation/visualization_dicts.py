@@ -106,7 +106,7 @@ def convert_cs_19(segmentation):
                  for label in cs_dict
                  if (label[2] != 255 and label[2] != -1)]
     cs_19_map = sum(cs_19_map) - 1
-    cs_19_map = tf.cast(cs_19_map, tf.uint8)
+    cs_19_map = tf.cast(cs_19_map, tf.int32)
     return cs_19_map
 
 

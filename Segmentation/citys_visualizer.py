@@ -53,11 +53,11 @@ def get_images_custom(image, label, shp=(256, 512), cs_19=False):
 
 if __name__ == "__main__":
     from utils.create_seg_tfrecords import TFRecordsSeg
-    ds_train = TFRecordsSeg(tfrecord_path="/volumes1/train.tfrecords").read_tfrecords()
-    ds_val = TFRecordsSeg(tfrecord_path="/volumes1/val.tfrecords").read_tfrecords()
+    ds_train = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/cityscapes_train.tfrecords").read_tfrecords()
+    ds_val = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/cityscapes_val.tfrecords").read_tfrecords()
     augmentor = lambda image, label: aug.augment(image, label, True, False, None, True, True, True, True, True)
     ds_train = ds_train.map(augmentor)
-    ds_train = ds_train.shuffle(100).batch(4)
+    ds_train = ds_train.batch(4)
     ds_val = ds_val.batch(4)
     cs_19 = True
     process = lambda image, label: get_images_custom(image, label, shp=(256, 512), cs_19=cs_19)
@@ -65,5 +65,5 @@ if __name__ == "__main__":
     ds_train_new = ds_train.map(process).repeat()
     cmap = vis.generate_random_colors()
     for image, segmentation in ds_train_new:
-        display(image, segmentation, cs_19=False, save_dir=None, cmap=cmap)
+        display(image, segmentation, cs_19=cs_19, save_dir=None, cmap=cmap)
     cv2.destroyAllWindows()

@@ -19,7 +19,8 @@ physical_devices = tf.config.experimental.list_physical_devices("GPU")
 if len(physical_devices) > 1:
     mirrored_strategy = tf.distribute.MirroredStrategy()
 else:
-    mirrored_strategy = tf.distribute.get_strategy()
+    # mirrored_strategy = tf.distribute.get_strategy()
+    mirrored_strategy = tf.distribute.MirroredStrategy()
 # print("\n\nMirroredStrategy Created\n\n")
 # print("\n\nPhysical_Devices: {}\n\n".format(physical_devices))
 
@@ -181,12 +182,13 @@ def train_step(mini_batch, aux=False, pick=None):
         if aux:
             losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
                                                                               1:3])) if n == 0 else args.aux_weight * calc_loss(
-                train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
+                      train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
                       enumerate(train_logits)]
             loss = tf.reduce_sum(losses)
             train_logits = train_logits[0]
         else:
             loss = calc_loss(train_labs, train_logits)
+        loss = tf.reduce_mean(loss)
     if pick is not None:
         trainable_vars = [var for var in model.trainable_variables if pick in var.name]
     else:
@@ -199,15 +201,15 @@ def train_step(mini_batch, aux=False, pick=None):
 @tf.function
 def distributed_train_step(dist_inputs):
     per_replica_losses, train_labs, train_logits = mirrored_strategy.run(train_step, args=(dist_inputs,))
-    if len(physical_devices) > 1:
-        loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
+    loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
                                         axis=None)
+    if len(physical_devices) > 1:
         return loss, \
                tf.concat(train_labs.values, axis=0), \
                tf.concat(train_logits.values, axis=0), \
                per_replica_losses
     else:
-        return per_replica_losses, \
+        return loss, \
                train_labs, \
                train_logits, \
                per_replica_losses
@@ -232,8 +234,8 @@ def write_summary_images(batch, logits):
         tf.summary.image("pred", gpu_cs_labels(tf.argmax(logits, axis=-1), cs_19), step=curr_step)
         tf.summary.image("gt", gpu_cs_labels(processed_labs[..., tf.newaxis], cs_19), step=curr_step)
     else:
-        tf.summary.image("pred", gpu_random_labels(tf.argmax(logits, axis=-1), cmap), step=curr_step)
-        tf.summary.image("gt", gpu_random_labels(processed_labs[..., tf.newaxis], cmap), step=curr_step)
+        tf.summary.image("pred", tf.squeeze(gpu_random_labels(tf.argmax(logits, axis=-1), cmap)), step=curr_step)
+        tf.summary.image("gt", tf.squeeze(gpu_random_labels(processed_labs[..., tf.newaxis], cmap)), step=curr_step)
 
 
 mini_batch, train_logits = None, None
@@ -243,8 +245,6 @@ for epoch in range(1, epochs + 1):
     for step, mini_batch in enumerate(processed_train):
         # loss = train_step(mini_batch)
         loss, train_labs, train_logits, tmp = distributed_train_step(mini_batch)
-        if loss > 400:
-            print(calc_loss(train_labs, train_logits))
 
         # ======== mIoU calculation ==========
         mIoU.reset_states()
