@@ -97,18 +97,18 @@ class TFRecordsSeg:
 
 
 if __name__ == "__main__":
-    classes = 32
-    train = TFRecordsSeg(image_dir="/data/input/datasets/cityscape_processed/leftImg8bit/train",
-                         label_dir="/data/input/datasets/cityscape_processed/gtFine/train",
-                         tfrecord_path="/volumes1/train.tfrecords",
-                         classes=classes,
-                         label_pattern="*labelIds.png")
+    classes = 150
+    train = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/training",
+                         label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/training",
+                         tfrecord_path="/volumes1/ade20k_train.tfrecords",
+                         classes=classes, img_pattern="*.jpg",
+                         label_pattern="*.png")
     # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
-    val = TFRecordsSeg(image_dir="/data/input/datasets/cityscape_processed/leftImg8bit/val",
-                       label_dir="/data/input/datasets/cityscape_processed/gtFine/val",
-                       tfrecord_path="/volumes1/val.tfrecords",
-                       classes=classes,
-                       label_pattern="*labelIds.png")
+    val = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/validation",
+                       label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/validation",
+                       tfrecord_path="/volumes1/ade20k_val.tfrecords",
+                       classes=classes, img_pattern="*.jpg",
+                       label_pattern="*.png")
     train.write_tfrecords()
     val.write_tfrecords()
     # example = train
