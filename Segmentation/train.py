@@ -218,8 +218,8 @@ val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 mIoU = K.metrics.MeanIoU(classes)
 
 
-def write_summary_images(batch, logits):
-    if len(physical_devices) > 1:
+def write_summary_images(batch, logits, train=True):
+    if len(physical_devices) > 1 and train:
         tf.summary.image("images", tf.concat(batch[0].values, axis=0) / 255, step=curr_step)
         processed_labs = tf.concat(batch[1].values, axis=0)
     else:
@@ -277,8 +277,10 @@ for epoch in range(1, epochs + 1):
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
     total_val_loss = []
     for val_mini_batch in tqdm.tqdm(processed_val):
-        val_mini_batch[0] = tf.concat(val_mini_batch[0].values, axis=0)
-        val_mini_batch[1] = tf.concat(val_mini_batch[1].values, axis=0)
+        if len(physical_devices) > 1:
+            val_mini_batch = list(val_mini_batch)
+            val_mini_batch[0] = tf.concat(val_mini_batch[0].values, axis=0)
+            val_mini_batch[1] = tf.concat(val_mini_batch[1].values, axis=0)
         if aux:
             val_logits = model(val_mini_batch[0])[0]
         else:
@@ -301,5 +303,5 @@ for epoch in range(1, epochs + 1):
         if val_mini_batch is not None:
             conf_matrix /= tf.reduce_sum(conf_matrix, axis=0)
             tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=total_steps)
-            write_summary_images(val_mini_batch, val_logits)
+            write_summary_images(val_mini_batch, val_logits, train=False)
     print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
