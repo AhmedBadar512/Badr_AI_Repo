@@ -115,7 +115,7 @@ augmentor = lambda image, label: aug.augment(image, label,
                                              args.random_contrast,
                                              args.random_quality)
 total_samples = len(list(dataset_train))
-dataset_train = dataset_train.map(augmentor)
+dataset_train = dataset_train.map(augmentor).take(128)
 
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
@@ -277,6 +277,8 @@ for epoch in range(1, epochs + 1):
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
     total_val_loss = []
     for val_mini_batch in tqdm.tqdm(processed_val):
+        val_mini_batch[0] = tf.concat(val_mini_batch[0].values, axis=0)
+        val_mini_batch[1] = tf.concat(val_mini_batch[1].values, axis=0)
         if aux:
             val_logits = model(val_mini_batch[0])[0]
         else:
