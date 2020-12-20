@@ -223,13 +223,16 @@ def write_summary_images(batch, logits):
         tf.summary.image("images", tf.concat(batch[0].values, axis=0) / 255, step=curr_step)
         processed_labs = tf.concat(batch[1].values, axis=0)
     else:
+        tf.summary.image("images", batch[0] / 255, step=curr_step)
         processed_labs = batch[1]
     if cs_19:
-        tf.summary.image("pred", tf.squeeze(gpu_cs_labels(tf.argmax(logits, axis=-1))), step=curr_step)
-        tf.summary.image("gt", tf.squeeze(gpu_cs_labels(processed_labs[..., tf.newaxis])), step=curr_step)
+        colorize = lambda img: tf.cast(tf.squeeze(gpu_cs_labels(img)), dtype=tf.uint8)
+        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=curr_step)
+        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=curr_step)
     else:
-        tf.summary.image("pred", tf.squeeze(gpu_random_labels(tf.argmax(logits, axis=-1), cmap)), step=curr_step)
-        tf.summary.image("gt", tf.squeeze(gpu_random_labels(processed_labs[..., tf.newaxis], cmap)), step=curr_step)
+        colorize = lambda img: tf.cast(tf.squeeze(gpu_random_labels(img, cmap)), dtype=tf.uint8)
+        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=curr_step)
+        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=curr_step)
 
 
 mini_batch, train_logits = None, None
