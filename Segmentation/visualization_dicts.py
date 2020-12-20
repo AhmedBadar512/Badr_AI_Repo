@@ -110,27 +110,30 @@ def convert_cs_19(segmentation):
     return cs_19_map
 
 
-def gpu_cs_labels(segmentation_maps, with_train_ids=True):
+def gpu_cs_labels(segmentation_maps):
     """
     segmentation_map: (b, h, w, 1) or (b, h, w)
     """
-    new_imgs = []
-    for segmentation_map in segmentation_maps:
-        new_img = tf.zeros((segmentation_map.shape[0], segmentation_map.shape[1], 3), tf.uint8)
-        color_named_tuple = get_cityscapes()
-        for label in color_named_tuple:
-            if with_train_ids:
-                if label[2] == 255 or label[2] == -1:
-                    continue
-                tmp = [segmentation_map == label[2]] * 3
-            else:
-                if label[2] == 255:
-                    continue
-                tmp = [segmentation_map == label[1]] * 3
-            tmp = tf.cast(tf.squeeze(tf.stack(tmp, axis=-1)), tf.uint8)
-            new_img = new_img + tmp * label[-1]
-        new_imgs.append(new_img)
-    return tf.stack(new_imgs)
+    ncmap = [label[-1] for label in get_cityscapes() if (label[2] != 255 and label[2] != -1)]
+    color_imgs = tf.gather(params=ncmap, indices=tf.cast(segmentation_maps, dtype=tf.int32))
+    return color_imgs
+    # new_imgs = []
+    # for segmentation_map in segmentation_maps:
+    #     new_img = tf.zeros((segmentation_map.shape[0], segmentation_map.shape[1], 3), tf.uint8)
+    #     color_named_tuple = get_cityscapes()
+    #     for label in color_named_tuple:
+    #         if with_train_ids:
+    #             if label[2] == 255 or label[2] == -1:
+    #                 continue
+    #             tmp = [segmentation_map == label[2]] * 3
+    #         else:
+    #             if label[2] == 255:
+    #                 continue
+    #             tmp = [segmentation_map == label[1]] * 3
+    #         tmp = tf.cast(tf.squeeze(tf.stack(tmp, axis=-1)), tf.uint8)
+    #         new_img = new_img + tmp * label[-1]
+    #     new_imgs.append(new_img)
+    # return tf.stack(new_imgs)
 
 
 def gpu_random_labels(segmentation_maps, cmp):
@@ -139,5 +142,11 @@ def gpu_random_labels(segmentation_maps, cmp):
     """
     if len(segmentation_maps.shape) == 4:
         segmentation_maps = segmentation_maps[..., 0]
-    color_imgs = tf.gather(params=cmp, indices=segmentation_maps)
+    color_imgs = tf.gather(params=cmp, indices=tf.cast(segmentation_maps, dtype=tf.int32))
     return color_imgs
+
+
+if __name__ == "__main__":
+    cs_dict = get_cityscapes()
+    ncmap = [label[-1] if (label[2] != 255 and label[2] != -1) else (0, 0, 0) for label in cs_dict]
+    print("a")
