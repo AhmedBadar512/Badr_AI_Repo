@@ -115,7 +115,7 @@ augmentor = lambda image, label: aug.augment(image, label,
                                              args.random_contrast,
                                              args.random_quality)
 total_samples = len(list(dataset_train))
-dataset_train = dataset_train.map(augmentor).take(128)
+dataset_train = dataset_train.map(augmentor)
 
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
