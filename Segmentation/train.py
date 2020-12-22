@@ -2,7 +2,6 @@ import tensorflow.keras as K
 import losses
 import argparse
 import os
-# import horovod.tensorflow as hvd
 import tensorflow as tf
 import datetime
 from citys_visualizer import get_images_custom
@@ -13,8 +12,6 @@ from model_provider import get_model
 import utils.augment_images as aug
 import tqdm
 
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '5'
-# hvd.init()
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 if len(physical_devices) > 1:
     mirrored_strategy = tf.distribute.MirroredStrategy()
@@ -133,8 +130,6 @@ processed_val = processed_val.shuffle(args.shuffle_buffer).batch(batch_size, dro
 processed_train = mirrored_strategy.experimental_distribute_dataset(processed_train)
 processed_val = mirrored_strategy.experimental_distribute_dataset(processed_val)
 # =========== Optimizer and Training Setup ============ #
-# lr_scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([50, 32000, 48000, 64000],
-#                                                                     [lr, lr / 10, lr / 100, lr / 1000, lr / 1e4])
 with mirrored_strategy.scope():
     if args.lr_scheduler == "poly":
         lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(initial_learning_rate=lr,
@@ -240,7 +235,6 @@ val_mini_batch, val_logits = None, None
 image_write_step = 0
 for epoch in range(1, epochs + 1):
     for step, mini_batch in enumerate(processed_train):
-        # loss = train_step(mini_batch)
         loss, train_labs, train_logits = distributed_train_step(mini_batch)
 
         # ======== mIoU calculation ==========
