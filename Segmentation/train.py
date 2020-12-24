@@ -13,7 +13,10 @@ import utils.augment_images as aug
 import tqdm
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
+
 if len(physical_devices) > 1:
+    for gpu in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu, True)
     mirrored_strategy = tf.distribute.MirroredStrategy()
 else:
     mirrored_strategy = tf.distribute.MirroredStrategy()
@@ -112,7 +115,6 @@ augmentor = lambda image, label: aug.augment(image, label,
                                              args.random_contrast,
                                              args.random_quality)
 total_samples = len(list(dataset_train))
-dataset_train = dataset_train.map(augmentor)
 
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
@@ -122,6 +124,7 @@ eval_dataset = dataset_validation
 get_images_processed = lambda image, label: get_images_custom(image, label, (args.height, args.width), cs_19)
 
 processed_train = dataset_train.map(get_images_processed)
+processed_train = processed_train.map(augmentor)
 processed_val = dataset_validation.map(get_images_processed)
 processed_train = processed_train.shuffle(args.shuffle_buffer).batch(batch_size, drop_remainder=True).prefetch(
     tf.data.experimental.AUTOTUNE)
@@ -173,7 +176,7 @@ def train_step(mini_batch, aux=False, pick=None):
         if aux:
             losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
                                                                               1:3])) if n == 0 else args.aux_weight * calc_loss(
-                      train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
+                train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
                       enumerate(train_logits)]
             loss = tf.reduce_sum(losses)
             train_logits = train_logits[0]
@@ -193,7 +196,7 @@ def train_step(mini_batch, aux=False, pick=None):
 def distributed_train_step(dist_inputs):
     per_replica_losses, train_labs, train_logits = mirrored_strategy.run(train_step, args=(dist_inputs,))
     loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
-                                        axis=None)
+                                    axis=None)
     if len(physical_devices) > 1:
         return loss, \
                tf.concat(train_labs.values, axis=0), \
