@@ -70,7 +70,7 @@ class TFRecordsSeg:
             inst_cnt = cv2.drawContours(inst_cnt, cnts, -1, (1., 1., 1.), thickness=1)
         return inst_cnt
 
-    def write_tfrecords(self):
+    def write_tfrecords(self, training=False, dataset_name=""):
         img_paths = sorted(pathlib.Path(self.image_dir).rglob(self.img_pattern))
         label_paths = sorted(pathlib.Path(self.labels_dir).rglob(self.label_pattern))
         with tf.io.TFRecordWriter(self.tfrecord_path) as writer:
@@ -79,6 +79,18 @@ class TFRecordsSeg:
                 label_string = open(str(label_path), 'rb').read()
                 tf_example = self.image_example(img_string, label_string)
                 writer.write(tf_example.SerializeToString())
+            if training:
+                import json
+                if os.path.exists('{}/data_samples.json'.format(os.path.dirname(self.tfrecord_path))):
+                    with open('{}/data_samples.json'.format(os.path.dirname(self.tfrecord_path))) as f:
+                        data = json.load(f)
+                    if dataset_name in list(data.keys()):
+                        print("Dataset {} value was already present but value was updated".format(dataset_name))
+                else:
+                    data = {}
+                data[dataset_name] = len(img_paths)
+                with open('{}/data_samples.json'.format(os.path.dirname(self.tfrecord_path)), 'w') as json_file:
+                    json.dump(data, json_file)
 
     def decode_strings(self, record):
         images = tf.io.decode_jpeg(record['image'], 3)
@@ -98,18 +110,19 @@ class TFRecordsSeg:
 
 if __name__ == "__main__":
     classes = 150
+    dataset_name = "ade20k1"
     train = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/training",
                          label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/training",
-                         tfrecord_path="/volumes1/ade20k_train.tfrecords",
+                         tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_train.tfrecords".format(dataset_name),
                          classes=classes, img_pattern="*.jpg",
                          label_pattern="*.png")
     # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
     val = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/validation",
                        label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/validation",
-                       tfrecord_path="/volumes1/ade20k_val.tfrecords",
+                       tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
                        classes=classes, img_pattern="*.jpg",
                        label_pattern="*.png")
-    train.write_tfrecords()
+    train.write_tfrecords(training=True, dataset_name=dataset_name)
     val.write_tfrecords()
     # example = train
     # image_dataset = example.read_tfrecords().repeat(10)

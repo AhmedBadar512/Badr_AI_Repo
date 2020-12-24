@@ -11,6 +11,7 @@ import string
 from model_provider import get_model
 import utils.augment_images as aug
 import tqdm
+import json
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 
@@ -24,7 +25,7 @@ else:
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
                   help="Name a dataset from the tf_dataset collection",
-                  choices=["cityscapes", "cityscapes19", "ade20k"])
+                  choices=["cityscapes", "cityscapes19", "ade20k", "fangzhou"])
 args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
@@ -34,9 +35,13 @@ args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epoch
 args.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-l", "--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
+args.add_argument("--loss", type=str, default="cross_entropy",
+                  choices=["cross_entropy", "focal_loss", "binary_crossentropy"],
+                  help="Loss function")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
+                                                                              
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
 args.add_argument("-l_m", "--load_model", type=str,
@@ -114,8 +119,9 @@ augmentor = lambda image, label: aug.augment(image, label,
                                              args.random_brightness,
                                              args.random_contrast,
                                              args.random_quality)
-total_samples = len(list(dataset_train))
-
+with open("/data/input/datasets/tf2_segmentation_tfrecords/data_samples.json") as f:
+    data = json.load(f)
+total_samples = data[dataset_name]
 # =========== Process dataset ============ #
 assert dataset_train is not None, "Training dataset can not be None"
 assert dataset_validation is not None, "Either test or validation dataset should not be None"
@@ -171,7 +177,7 @@ calc_loss = losses.get_loss(name='cross_entropy')
 
 def train_step(mini_batch, aux=False, pick=None):
     with tf.GradientTape() as tape:
-        train_logits = model(mini_batch[0])
+        train_logits = model(mini_batch[0], training=True)
         train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
         if aux:
             losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
@@ -286,7 +292,7 @@ for epoch in range(1, epochs + 1):
         gt = tf.reshape(tf.argmax(val_labs, axis=-1), -1)
         pred = tf.reshape(tf.argmax(val_logits, axis=-1), -1)
         mIoU.update_state(gt, pred)
-        total_val_loss.append(calc_loss(val_labs, val_logits))
+        total_val_loss.append(tf.reduce_mean(calc_loss(val_labs, val_logits)))
         if conf_matrix is None:
             conf_matrix = tf.math.confusion_matrix(gt, pred, num_classes=classes)
         else:
