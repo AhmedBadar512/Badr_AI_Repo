@@ -270,6 +270,7 @@ class ResNeStA(tf.keras.Model):
                  in_size=(224, 224),
                  classes=1000,
                  data_format="channels_last",
+                 aux=False,
                  **kwargs):
         super(ResNeStA, self).__init__(**kwargs)
         self.in_size = in_size
@@ -310,7 +311,7 @@ class ResNeStA(tf.keras.Model):
             input_dim=in_channels,
             name="output1/fc"))
 
-    def call(self, x, training=None):
+    def call(self, x, training=None, **kwargs):
         x = self.features(x, training=training)
         x = self.output1(x)
         return x

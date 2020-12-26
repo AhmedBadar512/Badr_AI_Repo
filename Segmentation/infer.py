@@ -10,6 +10,9 @@ import os
 from model_provider import get_model
 
 DATASET_DICT = {"cityscapes19": 19, "cityscapes": 34}
+physical_devices = tf.config.experimental.list_physical_devices("GPU")
+for gpu in physical_devices:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 
 def load_model_dynamic(pretrained_model_path, curr_model):
@@ -69,8 +72,6 @@ width, height = args.width, args.height
 img_dir = args.img_dir
 path = args.model_dir
 save_dir = args.save_dir
-# model = tf.saved_model.load(path)
-# model = tf.keras.models.load_model(path)
 model_name, ds_name = get_model_props(args.model_dir)
 if args.input_resize:
     model = tf.keras.models.load_model(path)
