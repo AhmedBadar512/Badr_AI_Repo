@@ -9,7 +9,7 @@ import argparse
 import os
 from model_provider import get_model
 
-DATASET_DICT = {"cityscapes19": 19, "cityscapes": 34}
+DATASET_DICT = {"cityscapes19": 19, "cityscapes": 34, "fangzhou": 5}
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 for gpu in physical_devices:
     tf.config.experimental.set_memory_growth(gpu, True)
@@ -18,7 +18,8 @@ for gpu in physical_devices:
 def load_model_dynamic(pretrained_model_path, curr_model):
     if os.path.exists(os.path.join(pretrained_model_path, "saved_model.pb")):
         pretrained_model = tf.keras.models.load_model(pretrained_model_path)
-        curr_model.build(input_shape=(None, None, None, 3))
+        curr_model(tf.random.uniform((None, None, None, 3), dtype=tf.uint8, maxval=255))
+        # curr_model.build(input_shape=(None, None, None, 3))
         curr_model.set_weights(pretrained_model.get_weights())
         print("Model loaded from {} successfully".format(os.path.basename(pretrained_model_path)))
     else:
@@ -38,7 +39,7 @@ args.add_argument("--img_dir",
                   help="Path containing the png/jpg files")
 args.add_argument("-m", "--model_dir",
                   type=str,
-                  default="sample_model/15",
+                  default="/volumes1/code/Badr_AI_Repo/Segmentation/runs/fangzhou_epochs-100_cross_entropy_bs-16_Adam_lr_0.0001-exp_decay_sinet_cityscapes_20201224-2040/sinet_cityscapes/50",
                   help="Path to TF2 saved model dir")
 args.add_argument("-s", "--save_dir",
                   type=str,

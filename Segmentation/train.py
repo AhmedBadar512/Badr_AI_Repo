@@ -177,13 +177,11 @@ step = 0
 curr_step = 0
 
 calc_loss = losses.get_loss(name=args.loss)
-class_IoU = tf.constant([1.] * classes, dtype=tf.float32)
 
 
 def train_step(mini_batch, aux=False, pick=None):
-    global class_IoU
     with tf.GradientTape() as tape:
-        train_logits = model(mini_batch[0], training=True) / class_IoU
+        train_logits = model(mini_batch[0], training=True)
         train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
         if aux:
             losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
@@ -311,7 +309,6 @@ for epoch in range(1, epochs + 1):
                           step=total_steps)
         if val_mini_batch is not None:
             conf_matrix /= tf.reduce_sum(conf_matrix, axis=0)
-            class_IoU = tf.constant(np.diag(conf_matrix.numpy())) + 1e-4
             tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=total_steps)
             write_summary_images(val_mini_batch, val_logits, train=False)
     print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
