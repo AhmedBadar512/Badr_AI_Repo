@@ -10,6 +10,9 @@ import os
 from model_provider import get_model
 
 DATASET_DICT = {"cityscapes19": 19, "cityscapes": 34}
+physical_devices = tf.config.experimental.list_physical_devices("GPU")
+for gpu in physical_devices:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 
 def load_model_dynamic(pretrained_model_path, curr_model):

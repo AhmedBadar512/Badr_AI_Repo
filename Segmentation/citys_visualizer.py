@@ -16,7 +16,8 @@ def display(img_list, seg_list, pred_list=None, cs_19=False, save_dir=None, img_
         seg_list = vis.gpu_cs_labels(seg_list)
     else:
         seg_list = vis.gpu_random_labels(seg_list, cmp=cmap)
-    seg_list = tf.squeeze(seg_list)
+    if len(seg_list.shape) != 4:
+        seg_list = tf.squeeze(seg_list)
     img_list, seg_list = img_list.numpy(), seg_list.numpy()
     new_img = cv2.hconcat(img_list[..., ::-1])
     new_seg = cv2.hconcat(seg_list[..., ::-1])
@@ -61,17 +62,21 @@ def get_images_custom(image, label, shp=(256, 512), cs_19=False):
 
 if __name__ == "__main__":
     from utils.create_seg_tfrecords import TFRecordsSeg
-    ds_train = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/ade20k_train.tfrecords").read_tfrecords()
+    ds_train = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/fangzhou_train.tfrecords").read_tfrecords()
     ds_val = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/ade20k_val.tfrecords").read_tfrecords()
-    augmentor = lambda image, label: aug.augment(image, label, False, False, (128, 256), False, False, False, False, False)
+    augmentor = lambda image, label: aug.augment(image, label, False, False, None, False, False, False, False, False)
     cs_19 = False
-    process = lambda image, label: get_images_custom(image, label, shp=(128, 256), cs_19=cs_19)
+    bg_class = 0
+    process = lambda image, label: get_images_custom(image, label, shp=(512, 1024), cs_19=cs_19)
 
     ds_train = ds_train.map(process).repeat()
     ds_train = ds_train.map(augmentor)
-    ds_train = ds_train.batch(4)
-    ds_val = ds_val.batch(4)
-    cmap = vis.generate_random_colors()
+    ds_train = ds_train.batch(1)
+    ds_val = ds_val.batch(1)
+
+    cmap_mask = 1 - tf.one_hot(bg_class, depth=256, dtype=tf.int32)[..., tf.newaxis]
+    cmap = vis.generate_random_colors(seed=10) * cmap_mask
+
     for image, segmentation in ds_train:
         display(image, segmentation, cs_19=cs_19, save_dir=None, cmap=cmap)
     cv2.destroyAllWindows()

@@ -1,17 +1,20 @@
-import tensorflow.keras as K
-import losses
 import argparse
-import os
-import tensorflow as tf
 import datetime
-from citys_visualizer import get_images_custom
-from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
-from utils.create_seg_tfrecords import TFRecordsSeg
-import string
-from model_provider import get_model
-import utils.augment_images as aug
-import tqdm
 import json
+import os
+import string
+
+import tensorflow as tf
+import tensorflow.keras as K
+import tqdm
+
+import losses
+import utils.augment_images as aug
+from citys_visualizer import get_images_custom
+from model_provider import get_model
+from utils.create_seg_tfrecords import TFRecordsSeg
+from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
+import numpy as np
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 
@@ -41,7 +44,7 @@ args.add_argument("--loss", type=str, default="cross_entropy",
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
-                                                                              
+
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
 args.add_argument("-l_m", "--load_model", type=str,
@@ -88,11 +91,12 @@ log_freq = args.logging_freq
 write_image_summary_steps = args.write_image_summary_steps
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = os.path.join(args.save_dir, "{}_epochs-{}_bs-{}_{}_lr_{}-{}_{}_{}".format(dataset_name, epochs, batch_size,
-                                                                                   optimizer_name, lr,
-                                                                                   args.lr_scheduler,
-                                                                                   model_name,
-                                                                                   time))
+logdir = os.path.join(args.save_dir, "{}_epochs-{}_{}_bs-{}_{}_lr_{}-{}_{}_{}".format(dataset_name, epochs, args.loss,
+                                                                                      batch_size,
+                                                                                      optimizer_name, lr,
+                                                                                      args.lr_scheduler,
+                                                                                      model_name,
+                                                                                      time))
 
 # =========== Load Dataset ============ #
 
@@ -172,12 +176,14 @@ total_steps = 0
 step = 0
 curr_step = 0
 
-calc_loss = losses.get_loss(name='cross_entropy')
+calc_loss = losses.get_loss(name=args.loss)
+class_IoU = tf.constant([1.] * classes, dtype=tf.float32)
 
 
 def train_step(mini_batch, aux=False, pick=None):
+    global class_IoU
     with tf.GradientTape() as tape:
-        train_logits = model(mini_batch[0], training=True)
+        train_logits = model(mini_batch[0], training=True) / class_IoU
         train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
         if aux:
             losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
@@ -305,6 +311,7 @@ for epoch in range(1, epochs + 1):
                           step=total_steps)
         if val_mini_batch is not None:
             conf_matrix /= tf.reduce_sum(conf_matrix, axis=0)
+            class_IoU = tf.constant(np.diag(conf_matrix.numpy())) + 1e-4
             tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=total_steps)
             write_summary_images(val_mini_batch, val_logits, train=False)
     print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
