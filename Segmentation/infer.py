@@ -18,7 +18,7 @@ for gpu in physical_devices:
 def load_model_dynamic(pretrained_model_path, curr_model):
     if os.path.exists(os.path.join(pretrained_model_path, "saved_model.pb")):
         pretrained_model = tf.keras.models.load_model(pretrained_model_path)
-        curr_model(tf.random.uniform((None, None, None, 3), dtype=tf.uint8, maxval=255))
+        curr_model(tf.random.uniform((1, height, width, 3), dtype=tf.float32, maxval=255))
         # curr_model.build(input_shape=(None, None, None, 3))
         curr_model.set_weights(pretrained_model.get_weights())
         print("Model loaded from {} successfully".format(os.path.basename(pretrained_model_path)))
@@ -77,9 +77,13 @@ model_name, ds_name = get_model_props(args.model_dir)
 if args.input_resize:
     model = tf.keras.models.load_model(path)
 else:
-    model = get_model(model_name, classes=DATASET_DICT[ds_name])
+    model = get_model(model_name, classes=DATASET_DICT[ds_name], in_size=(height, width))
 
     load_model_dynamic(args.model_dir, model)
+
+if ds_name == "cityscapes19":
+    args.cs19 = False
+
 exts = ["*jpg", "*png", "*jpeg"]
 imgs = [str(img) for ext in exts for img in pathlib.Path(img_dir).rglob(ext)]
 

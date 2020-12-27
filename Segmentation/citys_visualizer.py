@@ -17,7 +17,10 @@ def display(img_list, seg_list, pred_list=None, cs_19=False, save_dir=None, img_
     else:
         seg_list = vis.gpu_random_labels(seg_list, cmp=cmap)
     if len(seg_list.shape) != 4:
+        bs = seg_list.shape[0]
         seg_list = tf.squeeze(seg_list)
+        if bs == 1:
+            seg_list = seg_list[tf.newaxis]
     img_list, seg_list = img_list.numpy(), seg_list.numpy()
     new_img = cv2.hconcat(img_list[..., ::-1])
     new_seg = cv2.hconcat(seg_list[..., ::-1])
