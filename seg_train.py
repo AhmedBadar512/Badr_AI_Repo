@@ -10,11 +10,10 @@ import tqdm
 
 import losses
 import utils.augment_images as aug
-from citys_visualizer import get_images_custom
+from seg_visualizer import get_images_custom
 from model_provider import get_model
 from utils.create_seg_tfrecords import TFRecordsSeg
 from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
-import numpy as np
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 

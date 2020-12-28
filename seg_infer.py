@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import cv2
 import pathlib
-from citys_visualizer import display
+from seg_visualizer import display
 from visualization_dicts import generate_random_colors
 import tqdm
 import argparse
@@ -39,7 +39,7 @@ args.add_argument("--img_dir",
                   help="Path containing the png/jpg files")
 args.add_argument("-m", "--model_dir",
                   type=str,
-                  default="/volumes1/code/Badr_AI_Repo/Segmentation/runs/fangzhou_epochs-100_cross_entropy_bs-16_Adam_lr_0.0001-exp_decay_sinet_cityscapes_20201224-2040/sinet_cityscapes/50",
+                  default="/data/output/ahmed-badar/cityscapes19_epochs-1000_bs-4_Adam_lr_0.0008-exp_decay_unet_20201213-1017/unet/640",
                   help="Path to TF2 saved model dir")
 args.add_argument("-s", "--save_dir",
                   type=str,
