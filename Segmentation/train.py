@@ -184,9 +184,10 @@ def train_step(mini_batch, aux=False, pick=None):
         train_logits = model(mini_batch[0], training=True)
         train_labs = tf.one_hot(mini_batch[1][..., 0], classes)
         if aux:
-            losses = [calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
-                                                                              1:3])) if n == 0 else args.aux_weight * calc_loss(
-                train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3])) for n, train_logit in
+            losses = [tf.reduce_mean(calc_loss(train_labs, tf.image.resize(train_logit, size=train_labs.shape[
+                                                                                             1:3]))) if n == 0 else args.aux_weight * tf.reduce_mean(
+                calc_loss(
+                    train_labs, tf.image.resize(train_logit, size=train_labs.shape[1:3]))) for n, train_logit in
                       enumerate(train_logits)]
             loss = tf.reduce_sum(losses)
             train_logits = train_logits[0]
@@ -204,7 +205,7 @@ def train_step(mini_batch, aux=False, pick=None):
 
 @tf.function
 def distributed_train_step(dist_inputs):
-    per_replica_losses, train_labs, train_logits = mirrored_strategy.run(train_step, args=(dist_inputs,))
+    per_replica_losses, train_labs, train_logits = mirrored_strategy.run(train_step, args=(dist_inputs, aux))
     loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
                                     axis=None)
     if len(physical_devices) > 1:
