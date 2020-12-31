@@ -1,25 +1,12 @@
 """
 This Script is for GAN based trainings.
 """
-import argparse
-import datetime
-import json
-import os
-import string
-
 import cv2
 import tensorflow as tf
 import tensorflow.keras as K
 import tensorflow_datasets as tfds
 import tqdm
-import matplotlib.pyplot as plt
-
-import losses
-import utils.augment_images as aug
-from seg_visualizer import get_images_custom
 from model_provider import get_model
-from utils.create_seg_tfrecords import TFRecordsSeg
-from visualization_dicts import generate_random_colors, gpu_random_labels
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 
