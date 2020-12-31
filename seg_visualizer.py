@@ -67,7 +67,7 @@ if __name__ == "__main__":
     from utils.create_seg_tfrecords import TFRecordsSeg
     ds_train = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/fangzhou_train.tfrecords").read_tfrecords()
     ds_val = TFRecordsSeg(tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/ade20k_val.tfrecords").read_tfrecords()
-    augmentor = lambda image, label: aug.augment(image, label, False, False, None, False, False, False, False, False)
+    augmentor = lambda image, label: aug.augment_seg(image, label, False, False, None, False, False, False, False, False)
     cs_19 = False
     bg_class = 0
     process = lambda image, label: get_images_custom(image, label, shp=(512, 1024), cs_19=cs_19)
@@ -77,8 +77,7 @@ if __name__ == "__main__":
     ds_train = ds_train.batch(1)
     ds_val = ds_val.batch(1)
 
-    cmap_mask = 1 - tf.one_hot(bg_class, depth=256, dtype=tf.int32)[..., tf.newaxis]
-    cmap = vis.generate_random_colors(seed=10) * cmap_mask
+    cmap = vis.generate_random_colors(seed=10, bg_class=bg_class)
 
     for image, segmentation in ds_train:
         display(image, segmentation, cs_19=cs_19, save_dir=None, cmap=cmap)

@@ -1,15 +1,15 @@
 import tensorflow as tf
 
 
-def augment(image, label,
-            v_flip=False,
-            h_flip=False,
-            crop=(256, 256),
-            rand_hue=False,
-            rand_sat=False,
-            rand_brightness=False,
-            rand_contrast=False,
-            rand_quality=False):
+def augment_seg(image, label,
+                v_flip=False,
+                h_flip=False,
+                crop=(256, 256),
+                rand_hue=False,
+                rand_sat=False,
+                rand_brightness=False,
+                rand_contrast=False,
+                rand_quality=False):
     if h_flip:
         image = tf.image.random_flip_left_right(image, seed=0)
         label = tf.image.random_flip_left_right(label, seed=0)

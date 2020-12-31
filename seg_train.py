@@ -58,6 +58,7 @@ args.add_argument("--height", type=int, default=512, help="Size of the shuffle b
 args.add_argument("--aux", action="store_true", default=False, help="Auxiliary losses included if true")
 args.add_argument("--aux_weight", type=float, default=0.25, help="Auxiliary losses included if true")
 args.add_argument("--random_seed", type=int, default=1, help="Set random seed to this if true")
+args.add_argument("--bg_class", type=int, default=0, help="Select bg class for visualization shown as black")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -105,7 +106,7 @@ if dataset_name == "cityscapes19":
 else:
     cs_19 = False
 if not cs_19:
-    cmap = generate_random_colors()
+    cmap = generate_random_colors(bg_class=args.bg_class)
 
 dataset_train = TFRecordsSeg(
     tfrecord_path=
@@ -113,15 +114,15 @@ dataset_train = TFRecordsSeg(
 dataset_validation = TFRecordsSeg(
     tfrecord_path=
     "{}/{}_val.tfrecords".format(args.tf_record_path, dataset_name)).read_tfrecords()
-augmentor = lambda image, label: aug.augment(image, label,
-                                             args.flip_up_down,
-                                             args.flip_left_right,
-                                             random_crop_size,
-                                             args.random_hue,
-                                             args.random_saturation,
-                                             args.random_brightness,
-                                             args.random_contrast,
-                                             args.random_quality)
+augmentor = lambda image, label: aug.augment_seg(image, label,
+                                                 args.flip_up_down,
+                                                 args.flip_left_right,
+                                                 random_crop_size,
+                                                 args.random_hue,
+                                                 args.random_saturation,
+                                                 args.random_brightness,
+                                                 args.random_contrast,
+                                                 args.random_quality)
 with open("/data/input/datasets/tf2_segmentation_tfrecords/data_samples.json") as f:
     data = json.load(f)
 total_samples = data[dataset_name]

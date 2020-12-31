@@ -46,8 +46,9 @@ def get_cityscapes():
     return labels
 
 
-def generate_random_colors(n=256, seed=0):
-    cmp = tf.random.uniform((n, 3), minval=0, maxval=255, dtype=tf.int32, seed=seed)
+def generate_random_colors(n=256, seed=0, bg_class=0):
+    cmap_mask = 1 - tf.one_hot(bg_class, depth=256, dtype=tf.int32)[..., tf.newaxis]
+    cmp = tf.random.uniform((n, 3), minval=0, maxval=255, dtype=tf.int32, seed=seed) * cmap_mask
     return cmp
 
 
