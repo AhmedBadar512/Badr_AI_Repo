@@ -39,7 +39,7 @@ args.add_argument("--loss", type=str, default="MSE",
                   choices=["cross_entropy", "focal_loss", "binary_crossentropy", "MSE", "MAE"],
                   help="Loss function, Hint: Use the tanh activation for model with MSE and MAE, "
                        "and sigmoid for others")
-args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
+args.add_argument("-bs", "--batch_size", type=int, default=16, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
                                                                                    "after these many logging steps")
@@ -146,6 +146,7 @@ val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 val_loss = 0
 c_step = 0
 for epoch in range(args.epochs):
+    print("\n\n-------------Epoch {}-----------".format(epoch))
     if epoch % args.save_interval == 0:
         K.models.save_model(model, os.path.join(logdir, args.model, str(epoch)))
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, args.model, str(epoch))))
@@ -157,17 +158,21 @@ for epoch in range(args.epochs):
             tf.summary.scalar("Learning Rate", tmp, c_step)
             tf.summary.scalar("Loss", loss, c_step)
             if s % args.write_image_summary_steps == 0:
-                img = tf.cast(img.values[0], dtype=tf.float32)
+                if len(physical_devices) > 1:
+                    img = tf.cast(img.values[0], dtype=tf.float32)
                 new_img = model(img)
                 tf.summary.image("input", img, step=c_step)
                 tf.summary.image("output", new_img, step=c_step)
     for img in tqdm.tqdm(x_test, total=test_total_steps):
         if len(physical_devices) > 1:
-            img = tf.concat(img.values, axis=0)
-        output = model(img, training=False)
-        val_loss += tf.reduce_mean(calc_loss(img, output))
+            for im in img.values:
+                output = model(im, training=False)
+                val_loss += tf.reduce_mean(calc_loss(im, output))
+            img = im
+        else:
+            output = model(img, training=False)
+            val_loss += tf.reduce_mean(calc_loss(img, output))
     with val_writer.as_default():
         tf.summary.scalar("Loss", val_loss / test_total_steps, c_step)
         tf.summary.image("input", img, step=c_step)
         tf.summary.image("output", output, step=c_step)
-
