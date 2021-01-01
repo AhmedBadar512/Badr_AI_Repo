@@ -58,8 +58,10 @@ class Decoder(K.Model):
         x = self.conv_f(x)
         return x
 
+# TODO: Still have to add the GAN portion
 
-class AutoEncoder(K.Model):
+
+class FaceSwap(K.Model):
     def __init__(self):
         super().__init__()
         self.encoder = Encoder()

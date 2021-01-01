@@ -100,13 +100,13 @@ from models.lffd import *
 from models.voca import *
 from models.nvpattexp import *
 from models.unet import *
-from models.attention_gan import *
+from models.faceswap_gan import *
 
 __all__ = ['get_model']
 
 
 _models = {
-    'attention_gan': AutoEncoder,
+    'faceswap': FaceSwap,
     'alexnet': alexnet,
     'alexnetb': alexnetb,
 

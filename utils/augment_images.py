@@ -35,6 +35,7 @@ def augment_seg(image, label,
 
 
 def augment_autoencoder(batch,
+                        size=None,
                         v_flip=False,
                         h_flip=False,
                         crop=None,
@@ -44,6 +45,7 @@ def augment_autoencoder(batch,
                         rand_contrast=False,
                         rand_quality=False):
     image = batch['image']
+    image = tf.image.resize(image, size=size)
     if h_flip:
         image = tf.image.random_flip_left_right(image, seed=0)
     if v_flip:
