@@ -17,7 +17,7 @@ class Upscaler(K.layers.Layer):
 
 
 def hw_flatten(x):
-    return tf.reshape(x, shape=[x.shape[0], -1, x.shape[-1]])
+    return tf.reshape(x, shape=tf.constant([-1, x.shape[1] * x.shape[2], x.shape[-1]], dtype=tf.int32))
 
 
 class SelfAttentionBlock(K.layers.Layer):
@@ -37,7 +37,9 @@ class SelfAttentionBlock(K.layers.Layer):
         s = tf.matmul(hw_flatten(g), hw_flatten(f), transpose_b=True)
         beta = tf.nn.softmax(s)
         o = tf.matmul(beta, hw_flatten(h))
-        o = tf.reshape(o, shape=inputs.shape)
+        shp = list(inputs.shape)
+        shp[0] = -1
+        o = tf.reshape(o, shape=shp)
         o = self.o(o)
         return self.gamma * o + inputs
 
