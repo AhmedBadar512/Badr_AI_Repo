@@ -14,13 +14,9 @@ import string
 import os
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
-
-if len(physical_devices) > 1:
-    for gpu in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    mirrored_strategy = tf.distribute.MirroredStrategy()
-else:
-    mirrored_strategy = tf.distribute.MirroredStrategy()
+for gpu in physical_devices:
+    tf.config.experimental.set_memory_growth(gpu, True)
+mirrored_strategy = tf.distribute.MirroredStrategy()
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("-d", "--dataset", type=str, default="celeb_a",
                   help="Name a dataset from the tf_dataset collection",
