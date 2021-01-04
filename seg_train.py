@@ -16,13 +16,9 @@ from utils.create_seg_tfrecords import TFRecordsSeg
 from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
-
-if len(physical_devices) > 1:
-    for gpu in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    mirrored_strategy = tf.distribute.MirroredStrategy()
-else:
-    mirrored_strategy = tf.distribute.MirroredStrategy()
+for gpu in physical_devices:
+    tf.config.experimental.set_memory_growth(gpu, True)
+mirrored_strategy = tf.distribute.MirroredStrategy()
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
