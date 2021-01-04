@@ -163,10 +163,10 @@ with mirrored_strategy.scope():
     else:
         optimizer = K.optimizers.SGD(learning_rate=lr_scheduler, momentum=momentum)
     model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
+    model(tf.random.uniform((1, args.height, args.width, 3), dtype=tf.float32))
     if args.load_model:
         if os.path.exists(os.path.join(args.load_model, "saved_model.pb")):
             pretrained_model = K.models.load_model(args.load_model)
-            model.build(input_shape=(None, None, None, 3))
             model.set_weights(pretrained_model.get_weights())
             print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
         else:
@@ -247,7 +247,10 @@ def write_summary_images(batch, logits, train=True):
 mini_batch, train_logits = None, None
 val_mini_batch, val_logits = None, None
 image_write_step = 0
-for epoch in range(1, epochs + 1):
+for epoch in range(epochs):
+    if epoch % args.save_interval == 0:
+        K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
+        print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
     for step, mini_batch in enumerate(processed_train):
         loss, train_labs, train_logits = distributed_train_step(mini_batch)
 
@@ -280,9 +283,6 @@ for epoch in range(1, epochs + 1):
     mIoU.reset_states()
     conf_matrix = None
     total_steps += step
-    if epoch % args.save_interval == 0:
-        K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
-        print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
     total_val_loss = []
     for val_mini_batch in tqdm.tqdm(processed_val):
         if len(physical_devices) > 1:
