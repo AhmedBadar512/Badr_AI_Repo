@@ -36,7 +36,7 @@ class Encoder(K.Model):
 
 
 class Decoder(K.Model):
-    def __init__(self, final_activation):
+    def __init__(self, classes=3, final_activation=tf.nn.tanh):
         super().__init__()
         self.upscaler1 = Upscaler(256)
         self.upscaler2 = Upscaler(128)
@@ -45,7 +45,7 @@ class Decoder(K.Model):
         self.conv1 = K.layers.Conv2D(64, 3, 1, "same", activation=tf.nn.leaky_relu, kernel_regularizer=K.regularizers.l2())
         self.conv2 = K.layers.Conv2D(64, 3, 1, "same", kernel_regularizer=K.regularizers.l2())
         self.self_attn_blk2 = SelfAttentionBlock(64)
-        self.conv_f = K.layers.Conv2D(3, 5, 1, "same", activation=final_activation, kernel_regularizer=K.regularizers.l2())
+        self.conv_f = K.layers.Conv2D(classes, 5, 1, "same", activation=final_activation, kernel_regularizer=K.regularizers.l2())
 
     def call(self, inputs, training=None, mask=None):
         x = self.upscaler1(inputs)
@@ -80,10 +80,10 @@ class FaceSwapDiscriminator(K.Model):
 
 
 class FaceSwapGenerator(K.Model):
-    def __init__(self, activation=tf.nn.tanh):
+    def __init__(self, final_activation=tf.nn.tanh):
         super().__init__()
         self.encoder = Encoder()
-        self.decoder = Decoder(activation)
+        self.decoder = Decoder(final_activation)
 
     def call(self, inputs, training=None, mask=None):
         x = self.encoder(inputs)

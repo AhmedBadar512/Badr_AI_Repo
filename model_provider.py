@@ -2,6 +2,7 @@ from models.sinet import *
 from models.bisenet import *
 from models.unet import *
 from models.faceswap_gan import *
+from models.cycle_gan import *
 
 __all__ = ['get_model']
 
@@ -14,6 +15,8 @@ _models = {
 }
 
 _ganmodels = {
+    'cyclegan_gen': CycleGANGenerator,
+    'cyclegan_disc': CycleGANDiscriminator,
     'faceswap_gen': FaceSwapGenerator,
     'faceswap_disc': FaceSwapDiscriminator,
 }
