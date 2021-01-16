@@ -85,33 +85,57 @@ else:
     act = tf.nn.softmax
 
 
-def train_step(mini_batch, pick=None):
+def train_step(mini_batch, gen_loss_only=False, pick=None):
     img = tf.cast(mini_batch, dtype=tf.float32)
-    with tf.GradientTape() as tape:
-        output = model(img, training=True)
-        loss = calc_loss(img, output)
-        loss = tf.reduce_mean(loss)
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+        output = generator(img, training=True)
+        fake_output = discriminator(tf.concat([img, output], axis=-1))
+        real_output = discriminator(tf.concat([img, img], axis=-1))
+        gen_loss = calc_loss(tf.ones(shape=fake_output.shape), fake_output)
+        gen_loss = tf.reduce_mean(gen_loss)
+        disc_loss = calc_loss(tf.ones(shape=real_output.shape), real_output) + calc_loss(
+            tf.zeros(shape=fake_output.shape), fake_output)
+        disc_loss = tf.reduce_mean(disc_loss)
     if pick is not None:
-        trainable_vars = [var for var in model.trainable_variables if pick in var.name]
+        gen_trainable_vars = [var for var in generator.trainable_variables if pick in var.name]
+        disc_trainable_vars = [var for var in discriminator.trainable_variables if pick in var.name]
     else:
-        trainable_vars = model.trainable_variables
-    grads = tape.gradient(loss, trainable_vars)
-    optimizer.apply_gradients(zip(grads, trainable_vars))
-    return loss
+        gen_trainable_vars = generator.trainable_variables
+        disc_trainable_vars = discriminator.trainable_variables
+
+    gen_grads = gen_tape.gradient(gen_loss, gen_trainable_vars)
+    g_optimizer.apply_gradients(zip(gen_grads, gen_trainable_vars))
+    if not gen_loss_only:
+        disc_grads = disc_tape.gradient(disc_loss, disc_trainable_vars)
+        d_optimizer.apply_gradients(zip(disc_grads, disc_trainable_vars))
+    return gen_loss, disc_loss
 
 
 @tf.function
-def distributed_train_step(dist_inputs):
-    per_replica_losses = mirrored_strategy.run(train_step, args=(dist_inputs,))
-    reduced_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_losses,
-                                            axis=None)
-    return reduced_loss
+def distributed_train_step(dist_inputs, balance_ratio=-1):
+    per_replica_gen_losses, per_replica_disc_losses = mirrored_strategy.run(train_step, args=(dist_inputs,))
+    reduced_gen_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_gen_losses,
+                                                axis=None)
+    reduced_disc_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_disc_losses,
+                                                 axis=None)
+    while reduced_gen_loss / reduced_disc_loss < balance_ratio:
+        per_replica_gen_losses, per_replica_disc_losses = mirrored_strategy.run(train_step, args=(dist_inputs, True))
+        reduced_gen_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_gen_losses,
+                                                    axis=None)
+        reduced_disc_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_disc_losses,
+                                                     axis=None)
+    return reduced_gen_loss, reduced_disc_loss
 
 
 with mirrored_strategy.scope():
-    model = get_model(args.model, activation=act)
-    tmp = tf.cast(tf.random.uniform((1, args.height, args.width, 3), dtype=tf.float32, minval=0, maxval=1), dtype=tf.float32)
-    model(tmp)
+    generator = get_model(args.model + "_gen", activation=act, type="gan")
+    discriminator = get_model(args.model + "_disc", type="gan")
+    tmp = tf.cast(tf.random.uniform((1, args.height, args.width, 3), dtype=tf.float32, minval=0, maxval=1),
+                  dtype=tf.float32)
+    generator(tmp)
+    tmp = tf.cast(tf.random.uniform((1, args.height, args.width, 6), dtype=tf.float32, minval=0, maxval=1),
+                  dtype=tf.float32)
+    discriminator(tmp)
     if args.lr_scheduler == "poly":
         lrs = K.optimizers.schedules.PolynomialDecay(args.lr,
                                                      decay_steps=args.epochs * total_steps,
@@ -123,15 +147,18 @@ with mirrored_strategy.scope():
     else:
         lrs = args.lr
     if args.optimizer == "Adam":
-        optimizer = K.optimizers.Adam(learning_rate=lrs)
+        g_optimizer = K.optimizers.Adam(learning_rate=lrs)
+        d_optimizer = K.optimizers.Adam(learning_rate=lrs)
     elif args.optimizer == "RMSProp":
-        optimizer = K.optimizers.RMSprop(learning_rate=lrs, momentum=args.momentum)
+        g_optimizer = K.optimizers.RMSprop(learning_rate=lrs, momentum=args.momentum)
+        d_optimizer = K.optimizers.RMSprop(learning_rate=lrs, momentum=args.momentum)
     elif args.optimizer == "SGD":
-        optimizer = K.optimizers.SGD(learning_rate=lrs, momentum=args.momentum)
+        g_optimizer = K.optimizers.SGD(learning_rate=lrs, momentum=args.momentum)
+        d_optimizer = K.optimizers.SGD(learning_rate=lrs, momentum=args.momentum)
     if args.load_model:
         if os.path.exists(os.path.join(args.load_model, "saved_model.pb")):
             pretrained_model = K.models.load_model(args.load_model)
-            model.set_weights(pretrained_model.get_weights())
+            generator.set_weights(pretrained_model.get_weights())
             print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
         else:
             print("No file found at {}".format(os.path.join(args.load_model, "saved_model.pb")))
@@ -141,34 +168,51 @@ val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 
 val_loss = 0
 c_step = 0
+
+
+def get_gen_disc_loss(im):
+    output = generator(im, training=True)
+    fake_output = discriminator(tf.concat([im, output], axis=-1))
+    real_output = discriminator(tf.concat([im, im], axis=-1))
+    gen_loss = calc_loss(tf.ones(shape=fake_output.shape), fake_output)
+    gen_loss += tf.reduce_mean(gen_loss)
+    disc_loss = calc_loss(tf.ones(shape=real_output.shape), real_output) + calc_loss(
+        tf.zeros(shape=fake_output.shape), fake_output)
+    disc_loss += tf.reduce_mean(disc_loss)
+    return gen_loss, disc_loss, output
+
+
+g_loss, d_loss = 0, 1
+
 for epoch in range(args.epochs):
     print("\n\n-------------Epoch {}-----------".format(epoch))
     if epoch % args.save_interval == 0:
-        K.models.save_model(model, os.path.join(logdir, args.model, str(epoch)))
+        K.models.save_model(generator, os.path.join(logdir, args.model, str(epoch)))
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, args.model, str(epoch))))
     for s, img in enumerate(tqdm.tqdm(x_train, total=total_steps)):
         c_step = epoch * total_steps + s
-        loss = distributed_train_step(img).numpy()
+        g_loss, d_loss = distributed_train_step(img, balance_ratio=(g_loss - d_loss))
         with train_writer.as_default():
             tmp = lrs(step=c_step)
             tf.summary.scalar("Learning Rate", tmp, c_step)
-            tf.summary.scalar("Loss", loss, c_step)
+            tf.summary.scalar("G_Loss", g_loss.numpy(), c_step)
+            tf.summary.scalar("D_Loss", d_loss.numpy(), c_step)
             if s % args.write_image_summary_steps == 0:
                 if len(physical_devices) > 1:
                     img = tf.cast(img.values[0], dtype=tf.float32)
-                new_img = model(img)
+                new_img = generator(img)
                 tf.summary.image("input", img, step=c_step)
                 tf.summary.image("output", new_img, step=c_step)
+    gen_loss, disc_loss = 0, 0
     for img in tqdm.tqdm(x_test, total=test_total_steps):
         if len(physical_devices) > 1:
             for im in img.values:
-                output = model(im, training=False)
-                val_loss += tf.reduce_mean(calc_loss(im, output))
+                gen_loss, disc_loss, output = get_gen_disc_loss(im)
             img = im
         else:
-            output = model(img, training=False)
-            val_loss += tf.reduce_mean(calc_loss(img, output))
+            gen_loss, disc_loss, output = get_gen_disc_loss(img)
     with val_writer.as_default():
-        tf.summary.scalar("Loss", val_loss / test_total_steps, c_step)
+        tf.summary.scalar("G_Loss", gen_loss / test_total_steps, c_step)
+        tf.summary.scalar("D_Loss", disc_loss / test_total_steps, c_step)
         tf.summary.image("input", img, step=c_step)
         tf.summary.image("output", output, step=c_step)

@@ -7,15 +7,19 @@ __all__ = ['get_model']
 
 
 _models = {
-    'faceswap': FaceSwap,
     'unet': UNet,
     'vunet': VUNet,
     'sinet_nie': get_nie_sinet,
     'bisenet_resnet18_celebamaskhq': bisenet_resnet18_celebamaskhq,
 }
 
+_ganmodels = {
+    'faceswap_gen': FaceSwapGenerator,
+    'faceswap_disc': FaceSwapDiscriminator,
+}
 
-def get_model(name, **kwargs):
+
+def get_model(name, type="seg", **kwargs):
     """
     Get supported model.
 
@@ -30,7 +34,12 @@ def get_model(name, **kwargs):
         Resulted model.
     """
     name = name.lower()
-    if name not in _models:
+    if name not in _models and name not in _ganmodels:
         raise ValueError("Unsupported model: {}".format(name))
-    net = _models[name](**kwargs)
+    if "seg" in type.lower():
+        net = _models[name](**kwargs)
+    elif "gan" in type.lower():
+        net = _ganmodels[name](**kwargs)
+    else:
+        raise TypeError("{} type of networks do not exist".format(type))
     return net

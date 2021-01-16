@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as K
-from models.non_integrated.autoencoder_layers import SelfAttentionBlock, Upscaler
+from .autoencoder_layers import SelfAttentionBlock, Upscaler
 
 
 class Encoder(K.Model):
@@ -58,10 +58,28 @@ class Decoder(K.Model):
         x = self.conv_f(x)
         return x
 
-# TODO: Still have to add the GAN portion
+
+class FaceSwapDiscriminator(K.Model):
+    def __init__(self):
+        super().__init__()
+        self.conv = K.layers.Convolution2D(64, 3, 2, padding="same", activation=tf.nn.leaky_relu)
+        self.conv1 = K.layers.Convolution2D(128, 3, 2, padding="same", activation=tf.nn.leaky_relu)
+        self.self_attn_blk1 = SelfAttentionBlock(128)
+        self.conv2 = K.layers.Convolution2D(256, 3, 2, padding="same", activation=tf.nn.leaky_relu)
+        self.self_attn_blk2 = SelfAttentionBlock(256)
+        self.conv3 = K.layers.Convolution2D(1, 5, 1, padding="same")
+
+    def call(self, inputs, training=None, mask=None):
+        x = self.conv(inputs)
+        x = self.conv1(x)
+        x = self.self_attn_blk1(x)
+        x = self.conv2(x)
+        x = self.self_attn_blk2(x)
+        x = self.conv3(x)
+        return x
 
 
-class FaceSwap(K.Model):
+class FaceSwapGenerator(K.Model):
     def __init__(self, activation=tf.nn.tanh):
         super().__init__()
         self.encoder = Encoder()
