@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as K
-from .autoencoder_layers import SelfAttentionBlock, Upscaler
+from models.non_integrated.autoencoder_layers import SelfAttentionBlock, Upscaler
 
 
 class Encoder(K.Model):

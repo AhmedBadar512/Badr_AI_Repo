@@ -10,7 +10,7 @@ import os
 import tensorflow as tf
 import tensorflow.keras.layers as nn
 from .common import conv1x1_block, conv3x3_block, saconv3x3_block, AvgPool2d, SimpleSequential, is_channels_first
-from .senet import SEInitBlock
+from models.non_integrated.senet import SEInitBlock
 
 
 class ResNeStABlock(nn.Layer):
