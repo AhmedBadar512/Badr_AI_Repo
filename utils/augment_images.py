@@ -44,7 +44,10 @@ def augment_autoencoder(batch,
                         rand_brightness=False,
                         rand_contrast=False,
                         rand_quality=False):
-    image = batch['image']
+    if type(batch) is dict:
+        image = batch['image']
+    else:
+        image = batch
     image = tf.image.resize(image, size=size)/255
     # image = tf.image.per_image_standardization(image)
     if h_flip:

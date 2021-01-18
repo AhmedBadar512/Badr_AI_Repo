@@ -158,7 +158,7 @@ class CycleGANDiscriminator(K.Model):
         self.conv2 = ConvInActivation(base_channels * 2, kernel_size=4, strides=2)
         self.conv3 = ConvInActivation(base_channels * 4, kernel_size=4, strides=2)
         self.conv4 = ConvInActivation(base_channels * 8, kernel_size=4, strides=2)
-        self.final_conv = ConvInActivation(1, kernel_size=1)
+        self.final_conv = K.layers.Conv2D(1, kernel_size=1, activation="sigmoid")
 
     def call(self, inputs, training=None, mask=None):
         x = self.conv1(inputs, training=training)
@@ -177,5 +177,5 @@ if __name__ == "__main__":
     gen = CycleGANGenerator(32, classes=3)
     disc = CycleGANDiscriminator()
     gen_out = gen(x, False)
-    y = disc(gen_out, False)
+    y = disc(gen_out, True)
     print(gen_out.shape, y.shape)
