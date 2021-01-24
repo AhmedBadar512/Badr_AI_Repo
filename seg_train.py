@@ -34,7 +34,7 @@ args.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate"
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-l", "--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
 args.add_argument("--loss", type=str, default="cross_entropy",
-                  choices=["cross_entropy", "focal_loss", "binary_crossentropy"],
+                  choices=["cross_entropy", "focal_loss", "binary_crossentropy", "RMI"],
                   help="Loss function")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
@@ -173,6 +173,7 @@ step = 0
 curr_step = 0
 
 calc_loss = losses.get_loss(name=args.loss)
+cross_entropy_loss = losses.get_loss(name="cross_entropy")
 
 
 def train_step(mini_batch, aux=False, pick=None):
