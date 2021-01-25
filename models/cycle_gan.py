@@ -5,6 +5,7 @@ import tensorflow.keras as K
 
 class ConvInActivation(K.layers.Layer):
     """Convolution-Instance Normalization-Activation"""
+
     def __init__(self, filters=64, kernel_size=1, strides=1, activation=tf.nn.leaky_relu, norm=True):
         super().__init__()
         self.conv = K.layers.Convolution2D(filters, kernel_size, strides, padding="same")
@@ -19,6 +20,22 @@ class ConvInActivation(K.layers.Layer):
         if self.norm is not None:
             x = self.norm(x, **kwargs)
         return self.activation(x)
+
+
+class ResBlock(K.layers.Layer):
+    """Convolution-Instance Normalization-Activation"""
+
+    def __init__(self, filters=64, kernel_size=1, strides=1):
+        super().__init__()
+        self.conv1 = ConvInActivation(filters, kernel_size, strides)
+        self.conv2 = ConvInActivation(filters, kernel_size, 1)
+        self.conv_res = K.layers.Convolution2D(filters, kernel_size=1, strides=strides, padding="same")
+
+    def call(self, inputs, **kwargs):
+        identity = self.conv_res(inputs)
+        x = self.conv1(inputs)
+        x = self.conv2(x)
+        return x + identity
 
 
 class CycleGANGenerator(K.Model):
@@ -151,6 +168,27 @@ class CycleGANGenerator(K.Model):
         return final
 
 
+class ResCycleGANGenerator(K.Model):
+    def __init__(self,
+                 base_channels=64,
+                 final_activation=tf.nn.tanh,
+                 classes=3,
+                 **kwargs):
+        super().__init__(**kwargs)
+        self.main_body = K.Sequential(layers=
+                                      [ConvInActivation(base_channels, 7, 1),
+                                       ConvInActivation(base_channels * 2, 3, 2),
+                                       ConvInActivation(base_channels * 4, 3, 2)] +
+                                      [ResBlock(base_channels * 4) for _ in range(9)] +
+                                      [K.layers.Conv2DTranspose(base_channels * 2, 3, 2, padding="same"),
+                                       K.layers.Conv2DTranspose(base_channels, 3, 2, padding="same"),
+                                       K.layers.Convolution2D(classes, 7, 1, padding="same", activation=final_activation)
+                                       ])
+
+    def call(self, inputs, training=None, mask=None):
+        return self.main_body(inputs, training)
+
+
 class CycleGANDiscriminator(K.Model):
     def __init__(self, base_channels=64):
         super().__init__()
@@ -174,8 +212,9 @@ if __name__ == "__main__":
     for gpu in physical_devices:
         tf.config.experimental.set_memory_growth(gpu, True)
     x = tf.random.uniform((8, 512, 512, 3))
-    gen = CycleGANGenerator(32, classes=3)
+    gen = ResCycleGANGenerator(32, classes=3)
     disc = CycleGANDiscriminator()
     gen_out = gen(x, False)
     y = disc(gen_out, True)
+    print(gen.summary())
     print(gen_out.shape, y.shape)
