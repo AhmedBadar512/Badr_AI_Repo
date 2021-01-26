@@ -20,20 +20,20 @@ for gpu in physical_devices:
     tf.config.experimental.set_memory_growth(gpu, True)
 mirrored_strategy = tf.distribute.MirroredStrategy()
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("-d", "--dataset", type=str, default="celeb_a",
+args.add_argument("-d", "--dataset", type=str, default="zebra2horse",
                   help="Name a dataset from the tf_dataset collection",
-                  choices=["celeb_a", "zebra2horse"])
+                  choices=["zebra2horse"])
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
-args.add_argument("-fa", "--final_activation", type=str, default="tanh",
+args.add_argument("-fa", "--final_activation", type=str, default="linear",
                   help="Select final activation layer for decoder",
-                  choices=["tanh", "sigmoid", "softmax"])
+                  choices=["tanh", "sigmoid", "softmax", "linear"])
 args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select learning rate scheduler",
                   choices=["poly", "exp_decay"])
-args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
-args.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
+args.add_argument("-e", "--epochs", type=int, default=200, help="Number of epochs to train")
+args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
-args.add_argument("-bs", "--batch_size", type=int, default=8, help="Size of mini-batch")
+args.add_argument("-bs", "--batch_size", type=int, default=2, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
                                                                                    "after these many logging steps")
@@ -87,8 +87,10 @@ x_test_B = TFRecordsGAN(
     "{}/{}_val.tfrecords".format(args.tf_record_path, args.dataset + "_b")).read_tfrecords().batch(args.batch_size,
                                                                                                    drop_remainder=True)
 augmentor = lambda batch: augment_autoencoder(batch, size=(args.height, args.width))
-x_train_A, x_train_B = x_train_A.map(augmentor).batch(args.batch_size, drop_remainder=True).shuffle(args.shuffle_buffer).prefetch(
-    tf.data.experimental.AUTOTUNE), x_train_B.map(augmentor).batch(args.batch_size, drop_remainder=True).shuffle(args.shuffle_buffer).prefetch(
+x_train_A, x_train_B = x_train_A.map(augmentor).batch(args.batch_size, drop_remainder=True).shuffle(
+    args.shuffle_buffer).prefetch(
+    tf.data.experimental.AUTOTUNE), x_train_B.map(augmentor).batch(args.batch_size, drop_remainder=True).shuffle(
+    args.shuffle_buffer).prefetch(
     tf.data.experimental.AUTOTUNE)
 x_train_A = mirrored_strategy.experimental_distribute_dataset(x_train_A)
 x_train_B = mirrored_strategy.experimental_distribute_dataset(x_train_B)
@@ -98,11 +100,13 @@ x_test_B = mirrored_strategy.experimental_distribute_dataset(x_test_B)
 calc_real_fake_loss = get_loss("MSE")
 calc_cycle_loss = get_loss("MAE")
 calc_id_loss = get_loss("MAE")
-w_cycle = 5.0
-w_real_fake = 10.0
-w_id = 0.5
+w_cycle = 10.0
+w_real_fake = 1.0
+w_id = 1.0
 
-if args.final_activation == "tanh":
+if args.final_activation == "linear":
+    act = K.activations.linear
+elif args.final_activation == "tanh":
     act = tf.nn.tanh
 elif args.final_activation == "sigmoid":
     act = tf.nn.sigmoid
@@ -149,13 +153,6 @@ def distributed_train_step(dist_inputs_a, dist_inputs_b, balance_ratio=-1.):
                                                 axis=None)
     reduced_disc_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_disc_losses,
                                                  axis=None)
-    while reduced_gen_loss / reduced_disc_loss < balance_ratio:
-        per_replica_gen_losses, per_replica_disc_losses = mirrored_strategy.run(train_step, args=(
-            dist_inputs_a, dist_inputs_b, True))
-        reduced_gen_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_gen_losses,
-                                                    axis=None)
-        reduced_disc_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_disc_losses,
-                                                     axis=None)
     return reduced_gen_loss, reduced_disc_loss
 
 
@@ -171,17 +168,17 @@ with mirrored_strategy.scope():
     gen_AB(tmp), gen_BA(tmp), disc_A(tmp), disc_B(tmp)
     if args.lr_scheduler == "poly":
         lrs = K.optimizers.schedules.PolynomialDecay(args.lr,
-                                                     decay_steps=args.epochs * total_steps,
-                                                     end_learning_rate=1e-8, power=2.0)
+                                                     decay_steps=args.epochs // 2,
+                                                     end_learning_rate=1e-8, power=0.8)
     elif args.lr_scheduler == "exp_decay":
         lrs = K.optimizers.schedules.ExponentialDecay(args.lr,
-                                                      decay_steps=args.epochs * total_steps,
+                                                      decay_steps=args.epochs // 2,
                                                       decay_rate=0.5)
     else:
         lrs = args.lr
     if args.optimizer == "Adam":
-        g_optimizer = K.optimizers.Adam(learning_rate=lrs)
-        d_optimizer = K.optimizers.Adam(learning_rate=lrs)
+        g_optimizer = K.optimizers.Adam(learning_rate=lrs, beta_1=0.5)
+        d_optimizer = K.optimizers.Adam(learning_rate=lrs, beta_1=0.5)
     elif args.optimizer == "RMSProp":
         g_optimizer = K.optimizers.RMSprop(learning_rate=lrs, momentum=args.momentum)
         d_optimizer = K.optimizers.RMSprop(learning_rate=lrs, momentum=args.momentum)
@@ -203,31 +200,13 @@ val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 val_loss = 0
 c_step = 0
 
-
-def get_gen_disc_loss(im_a, im_b):
-    fake_b = gen_AB(im_a, training=True)
-    fake_a = gen_BA(im_b, training=True)
-    recons_a = gen_BA(fake_b, training=True)
-    recons_b = gen_AB(fake_a, training=True)
-    valid_a = disc_A(fake_a, training=True)
-    valid_b = disc_B(fake_b, training=True)
-    id_a = gen_BA(im_a)
-    id_b = gen_AB(im_b)
-    # ====================== Generator Cycle ============================== #
-    cycle_loss = calc_cycle_loss(im_a, recons_a) + calc_cycle_loss(im_b, recons_b)
-    id_loss = calc_id_loss(im_a, id_a) + calc_id_loss(im_b, id_b)
-    real_fake_loss_gen = calc_real_fake_loss(1, disc_A(fake_a)) + calc_real_fake_loss(1, disc_B(fake_b))
-    gen_loss = cycle_loss + id_loss + real_fake_loss_gen
-    # ====================== Discriminator Cycle ========================== #
-    real_fake_loss_disc = calc_real_fake_loss(0, disc_A(valid_a)) + calc_real_fake_loss(0, disc_B(valid_b)) + \
-                          calc_real_fake_loss(1, disc_A(im_a)) + calc_real_fake_loss(1, disc_B(im_b))
-    disc_loss = tf.reduce_mean(real_fake_loss_disc)
-    # return gen_loss, disc_loss, output
-
-
-g_loss, d_loss = 0, 1
-
 for epoch in range(args.epochs):
+    if epoch > args.epochs // 2:
+        tmp = lrs(step=epoch - args.epochs // 2)
+    else:
+        tmp = args.lr
+    with train_writer.as_default():
+        tf.summary.scalar("Learning Rate", tmp, epoch)
     print("\n\n-------------Epoch {}-----------".format(epoch))
     if epoch % args.save_interval == 0:
         K.models.save_model(gen_AB, os.path.join(logdir, args.model, "gen_AB", str(epoch)))
@@ -237,8 +216,7 @@ for epoch in range(args.epochs):
         c_step = epoch * total_steps + s
         g_loss, d_loss = distributed_train_step(img_a, img_b)
         with train_writer.as_default():
-            tmp = lrs(step=c_step)
-            tf.summary.scalar("Learning Rate", tmp, c_step)
+            # tf.summary.scalar("Learning Rate", tmp, c_step)
             tf.summary.scalar("G_Loss", g_loss.numpy(), c_step)
             tf.summary.scalar("D_Loss", d_loss.numpy(), c_step)
             if s % args.write_image_summary_steps == 0:
