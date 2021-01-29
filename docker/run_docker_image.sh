@@ -1,6 +1,6 @@
 #!/bin/bash
-# DOCKERNAME = nvcr.io/navinfo/aicv/horovod_fixed:tf2
-DOCKERNAME=$1
+DOCKERNAME=nvcr.io/navinfo/aicv/gans:tf2.4
+#DOCKERNAME=$1
 docker build -t $DOCKERNAME .
 echo $DOCKERNAME
 xhost +
