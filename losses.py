@@ -35,6 +35,7 @@ class RMI(K.losses.Loss):
 
     def call(self, y_true, y_pred):
         assert y_true.shape == y_pred.shape
+        y_true, y_pred = tf.cast(y_true, dtype=tf.float64), tf.cast(y_pred, dtype=tf.float64)
         if self.from_logits:
             y_pred = tf.nn.softmax(y_pred, axis=-1)
         if self.stride > 1:
