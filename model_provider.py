@@ -15,7 +15,7 @@ _models = {
 }
 
 _ganmodels = {
-    'cyclegan_gen': ResCycleGANGenerator,
+    'cyclegan_gen': CycleGANGenerator,
     'cyclegan_disc': CycleGANDiscriminator,
     'faceswap_gen': FaceSwapGenerator,
     'faceswap_disc': FaceSwapDiscriminator,
