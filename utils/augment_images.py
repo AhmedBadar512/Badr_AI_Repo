@@ -35,10 +35,10 @@ def augment_seg(image, label,
 
 
 def augment_autoencoder(batch,
-                        size=None,
+                        size=(286, 286),
                         v_flip=False,
-                        h_flip=False,
-                        crop=None,
+                        h_flip=True,
+                        crop=(256, 256),
                         rand_hue=False,
                         rand_sat=False,
                         rand_brightness=False,
@@ -48,8 +48,10 @@ def augment_autoencoder(batch,
         image = batch['image']
     else:
         image = batch
+    # image = (tf.image.resize(image, size=size) / 127.5) - 1
     image = tf.image.resize(image, size=size)/255
-    # image = tf.image.per_image_standardization(image)
+    image = tf.image.per_image_standardization(image)
+    # image = (image - tf.reduce_mean(image, axis=[1, 2], keepdims=True)) / (tf.math.reduce_std(image, axis=[1, 2], keepdims=True) + 1e-9)
     if h_flip:
         image = tf.image.random_flip_left_right(image, seed=0)
     if v_flip:
