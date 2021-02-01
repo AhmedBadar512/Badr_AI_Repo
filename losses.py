@@ -17,7 +17,7 @@ def get_loss(name='cross_entropy'):
     elif name == "Wasserstein":
         loss_func = WasserSteinLoss(reduction=K.losses.Reduction.NONE)
     else:
-        loss_func = K.losses.MAE
+        loss_func = lambda real_image, cycled_image: tf.reduce_mean(tf.abs(real_image - cycled_image))
     return loss_func
 
 
@@ -93,6 +93,17 @@ class WasserSteinLoss(K.losses.Loss):
 
     def call(self, y_true, y_pred):
         return y_true * y_pred
+
+
+def gradient_penalty(img, f_img, m):
+    a = tf.random.uniform((), 0, 1, dtype=tf.float32)
+    interpolated_img = a * img + (1 - a) * f_img
+    with tf.GradientTape() as tape:
+        tape.watch(interpolated_img)
+        x = m(interpolated_img)
+    grads = tape.gradient(x, interpolated_img)
+    grad_l2 = tf.square(1 - tf.math.reduce_euclidean_norm(grads, axis=[1, 2, 3]))
+    return grad_l2
 
 
 if __name__ == "__main__":

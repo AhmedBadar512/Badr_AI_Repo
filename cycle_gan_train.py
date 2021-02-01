@@ -5,7 +5,7 @@ import cv2
 from utils.create_gan_tfrecords import TFRecordsGAN
 from utils.augment_images import augment_autoencoder
 import os
-import tqdm
+import tensorflow.keras as K
 import time
 from losses import get_loss
 
@@ -18,13 +18,17 @@ tf_record_path = "/data/input/datasets/tf2_gan_tfrecords"
 dataset = "zebra2horse"
 BUFFER_SIZE = 1000
 BATCH_SIZE = 16
-IMG_WIDTH = 256
-IMG_HEIGHT = 256
+IMG_WIDTH = 286
+IMG_HEIGHT = 286
+CROP_HEIGHT = 256
+CROP_WIDTH = 256
 OUTPUT_CHANNELS = 3
 LAMBDA = 10
 EPOCHS = 200
 LEARNING_RATE = 4e-4
+save_interval = 1
 checkpoint_path = "./checkpoints/train"
+load_model_path = "/volumes1/code/Badr_AI_Repo/checkpoints/train/cyclegan/0"
 MODEL = "cyclegan"
 
 
@@ -46,12 +50,14 @@ else:
     total_samples = num_samples_ab[1]
     train_A = train_A.repeat()
 
+
+augmentor = lambda batch: augment_autoencoder(batch, size=(IMG_HEIGHT, IMG_WIDTH), crop=(CROP_HEIGHT, CROP_WIDTH))
 train_A = train_A.map(
-    augment_autoencoder, num_parallel_calls=tf.data.AUTOTUNE).cache().shuffle(
+    augmentor, num_parallel_calls=tf.data.AUTOTUNE).cache().shuffle(
     BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True)
 
 train_B = train_B.map(
-    augment_autoencoder, num_parallel_calls=tf.data.AUTOTUNE).cache().shuffle(
+    augmentor, num_parallel_calls=tf.data.AUTOTUNE).cache().shuffle(
     BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True)
 train_A = mirrored_strategy.experimental_distribute_dataset(train_A)
 train_B = mirrored_strategy.experimental_distribute_dataset(train_B)
@@ -89,26 +95,46 @@ with mirrored_strategy.scope():
 
     discriminator_x = get_model("{}_disc".format(MODEL), type="gan")
     discriminator_y = get_model("{}_disc".format(MODEL), type="gan")
+    tmp = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, 3), dtype=tf.float32, minval=0, maxval=1),
+                  dtype=tf.float32)
+    generator_g(tmp), generator_f(tmp), discriminator_x(tmp), discriminator_y(tmp)
     generator_g_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.5)
     generator_f_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.5)
 
     discriminator_x_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.5)
     discriminator_y_optimizer = tf.keras.optimizers.Adam(LEARNING_RATE, beta_1=0.5)
 
-ckpt = tf.train.Checkpoint(generator_g=generator_g,
-                           generator_f=generator_f,
-                           discriminator_x=discriminator_x,
-                           discriminator_y=discriminator_y,
-                           generator_g_optimizer=generator_g_optimizer,
-                           generator_f_optimizer=generator_f_optimizer,
-                           discriminator_x_optimizer=discriminator_x_optimizer,
-                           discriminator_y_optimizer=discriminator_y_optimizer)
+# ckpt = tf.train.Checkpoint(generator_g=generator_g,
+#                            generator_f=generator_f,
+#                            discriminator_x=discriminator_x,
+#                            discriminator_y=discriminator_y,
+#                            generator_g_optimizer=generator_g_optimizer,
+#                            generator_f_optimizer=generator_f_optimizer,
+#                            discriminator_x_optimizer=discriminator_x_optimizer,
+#                            discriminator_y_optimizer=discriminator_y_optimizer)
+#
+# ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+def load_models(models_parent_dir):
+    assert os.path.exists(models_parent_dir), "The path {} is not valid".format(models_parent_dir)
+    p_gen_g = K.models.load_model(os.path.join(models_parent_dir, "gen_g"))
+    p_gen_f = K.models.load_model(os.path.join(models_parent_dir, "gen_f"))
+    p_disc_x = K.models.load_model(os.path.join(models_parent_dir, "disc_x"))
+    p_disc_y = K.models.load_model(os.path.join(models_parent_dir, "disc_y"))
+    generator_g.set_weights(p_gen_g.get_weights())
+    print("Generator G loaded successfully")
+    generator_f.set_weights(p_gen_f.get_weights())
+    print("Generator F loaded successfully")
+    discriminator_x.set_weights(p_disc_x.get_weights())
+    print("Discriminator X loaded successfully")
+    discriminator_y.set_weights(p_disc_y.get_weights())
+    print("Discriminator Y loaded successfully")
 
-ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
-if ckpt_manager.latest_checkpoint:
-    ckpt.restore(ckpt_manager.latest_checkpoint)
-    print('Latest checkpoint restored!!')
+# if ckpt_manager.latest_checkpoint:
+#     ckpt.restore(ckpt_manager.latest_checkpoint)
+#     print('Latest checkpoint restored!!')
+if load_model_path is not None:
+    load_models(load_model_path)
 
 
 def generate_images(model, test_input, name=""):
@@ -196,12 +222,16 @@ def distributed_train_step(dist_inputs_a, dist_inputs_b):
     return reduced_gen_g_loss, reduced_gen_f_loss, reduced_disc_x_loss, reduced_disc_y_loss
 
 
-# cv2.namedWindow("Test", 0)
-
 for epoch in range(EPOCHS):
     start = time.time()
     print("\n ----------- Epoch {} --------------\n".format(epoch + 1))
     n = 0
+    if epoch % save_interval == 0:
+        K.models.save_model(generator_g, os.path.join(checkpoint_path, MODEL, str(epoch), "gen_g"))
+        K.models.save_model(generator_f, os.path.join(checkpoint_path, MODEL, str(epoch), "gen_f"))
+        K.models.save_model(discriminator_x, os.path.join(checkpoint_path, MODEL, str(epoch), "disc_x"))
+        K.models.save_model(discriminator_y, os.path.join(checkpoint_path, MODEL, str(epoch), "disc_y"))
+        print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(checkpoint_path, MODEL, str(epoch))))
     for image_x, image_y in zip(train_A, train_B):
         gen_g_loss, gen_f_loss, disc_x_loss, disc_y_loss = distributed_train_step(image_x, image_y)
         print("Epoch {} \t Gen_G_Loss: {}, Gen_F_Loss: {}, Disc_X_Loss: {}, Disc_Y_Loss: {}".format(epoch + 1, gen_g_loss, gen_f_loss, disc_x_loss, disc_y_loss))
