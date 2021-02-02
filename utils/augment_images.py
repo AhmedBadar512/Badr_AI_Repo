@@ -50,7 +50,7 @@ def augment_autoencoder(batch,
         image = batch
     # image = (tf.image.resize(image, size=size) / 127.5) - 1
     image = tf.image.resize(image, size=size)/255
-    image = tf.image.per_image_standardization(image)
+    # image = tf.image.per_image_standardization(image)
     # image = (image - tf.reduce_mean(image, axis=[1, 2], keepdims=True)) / (tf.math.reduce_std(image, axis=[1, 2], keepdims=True) + 1e-9)
     if h_flip:
         image = tf.image.random_flip_left_right(image, seed=0)
