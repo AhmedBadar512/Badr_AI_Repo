@@ -102,7 +102,7 @@ def gradient_penalty(img, f_img, m):
         tape.watch(interpolated_img)
         x = m(interpolated_img)
     grads = tape.gradient(x, interpolated_img)
-    grad_l2 = tf.square(1 - tf.math.reduce_euclidean_norm(grads, axis=[1, 2, 3]))
+    grad_l2 = tf.reduce_mean(tf.square(1 - tf.math.reduce_euclidean_norm(grads, axis=[1, 2, 3])))
     return grad_l2
 
 
