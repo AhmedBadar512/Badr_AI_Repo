@@ -21,8 +21,8 @@ args.add_argument("-d", "--dataset", type=str, default="zebra2horse",
                   choices=["zebra2horse"])
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
-args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select learning rate scheduler",
-                  choices=["poly", "exp_decay"])
+args.add_argument("-lrs", "--lr_scheduler", type=str, default="constant", help="Select learning rate scheduler",
+                  choices=["poly", "exp_decay", "constant"])
 args.add_argument("-e", "--epochs", type=int, default=200, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
@@ -291,7 +291,7 @@ for epoch in range(START_EPOCH, EPOCHS):
     print("\n ----------- Epoch {} --------------\n".format(epoch + 1))
     n = 0
     with train_writer.as_default():
-        tf.summary.scalar("Learning Rate", lrs(epoch).numpy(), epoch)
+        tf.summary.scalar("Learning Rate", lrs(epoch).numpy(), epoch) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate", lrs, epoch)
     if epoch % save_interval == 0:
         save_models()
     for image_x, image_y in zip(train_A, train_B):
