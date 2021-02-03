@@ -31,6 +31,7 @@ args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-bs", "--batch_size", type=int, default=16, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-m", "--model", type=str, default="cyclegan", help="Select model")
+args.add_argument("-logs", "--logdir", type=str, default="./logs", help="Directory to save tensorboard logdir")
 args.add_argument("-l_m", "--load_model", type=str,
                   default=None,
                   help="Load model from path")
@@ -321,7 +322,7 @@ def distributed_train_step(dist_inputs_a, dist_inputs_b):
     return reduced_gen_g_loss, reduced_gen_f_loss, reduced_disc_x_loss, reduced_disc_y_loss
 
 
-train_writer = tf.summary.create_file_writer(os.path.join("./logs", logdir))
+train_writer = tf.summary.create_file_writer(os.path.join(args.logdir, logdir))
 
 
 def save_models():
