@@ -96,13 +96,14 @@ class WasserSteinLoss(K.losses.Loss):
 
 
 def gradient_penalty(img, f_img, m):
-    a = tf.random.uniform((), 0, 1, dtype=tf.float32)
+    a = tf.random.uniform((img.shape[0], 1, 1, 1), 0, 1, dtype=tf.float32)
     interpolated_img = a * img + (1 - a) * f_img
     with tf.GradientTape() as tape:
         tape.watch(interpolated_img)
         x = m(interpolated_img)
-    grads = tape.gradient(x, interpolated_img)
-    grad_l2 = tf.reduce_mean(tf.square(1 - tf.math.reduce_euclidean_norm(grads, axis=[1, 2, 3])))
+    grads = tape.gradient(x, [interpolated_img])[0]
+    slopes = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
+    grad_l2 = tf.reduce_mean(tf.square(1 - slopes))
     return grad_l2
 
 
