@@ -34,7 +34,7 @@ args.add_argument("-m", "--model", type=str, default="cyclegan", help="Select mo
 args.add_argument("-l_m", "--load_model", type=str,
                   default=None,
                   help="Load model from path")
-args.add_argument("-s", "--save_dir", type=str, default="./cyclegan_runs_del",
+args.add_argument("-s", "--save_dir", type=str, default="./cyclegan_runs",
                   help="Save directory for models and tensorboard")
 args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_gan_tfrecords",
                   help="Save directory that contains train and validation tfrecords")
