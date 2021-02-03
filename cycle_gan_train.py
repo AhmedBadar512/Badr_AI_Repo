@@ -23,7 +23,7 @@ args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select 
                   choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("-lrs", "--lr_scheduler", type=str, default="constant", help="Select learning rate scheduler",
                   choices=["poly", "exp_decay", "constant"])
-args.add_argument("-gm", "--gan_mode", type=str, default="constant", help="Select learning rate scheduler",
+args.add_argument("-gm", "--gan_mode", type=str, default="constant", help="Select training mode for GAN",
                   choices=["normal", "wgan_gp"])
 args.add_argument("-e", "--epochs", type=int, default=1000, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
