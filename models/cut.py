@@ -10,13 +10,13 @@ import tensorflow as tf
 
 import tensorflow.keras as K
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Lambda
+from tensorflow.keras.layers import Dense, Lambda
 
-from layers import ConvBlock, ConvTransposeBlock, ResBlock, Padding2D
+from .layers import ConvBlock, ConvTransposeBlock, ResBlock, Padding2D
 
 
 class CUTGenerator(Model):
-    def __init__(self, classes=3, norm_layer="instance", use_antialias=True, resnet_blocks=9, **kwargs):
+    def __init__(self, classes=3, norm_layer="instance", use_antialias=True, resnet_blocks=9):
         super().__init__()
         use_bias = norm_layer == "instance"
         self.classes = classes
@@ -49,12 +49,13 @@ class CUTGenerator(Model):
     def call(self, inputs, training=None, mask=None, res_feats=(0, 1), encoder_output=False):
         x = self.init_block(inputs)
         x1 = self.conv1(x)
+        feats = [inputs, x1]
         if self.use_antialias:
             x1 = tf.image.resize(x1, size=tf.shape(x1)[1:3] // 2, antialias=True)
         x2 = self.conv2(x1)
+        feats.append(x2)
         if self.use_antialias:
             x2 = tf.image.resize(x2, size=tf.shape(x2)[1:3] // 2, antialias=True)
-        feats = [inputs, x1, x2]
         for n, res_block in enumerate(self.res_blocks):
             x2 = res_block(x2)
             if n in res_feats:
@@ -174,8 +175,9 @@ if __name__ == "__main__":
     g1, g_feats = c_gen(a, encoder_output=True)
     d1 = c_disc(a)
     e_feats = c_enc(a)
+    [print(e1.shape) for e1 in e_feats]
     print(g1.shape)
     print(d1.shape)
     x, x_ids = c_mlp(e_feats)
     y, y_ids = c_mlp(g_feats, x_ids)
-    [input(e1 - e2) for e1, e2 in zip(x, y)]
+    [print(e1.shape) for e1, e2 in zip(x, y)]
