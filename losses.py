@@ -112,7 +112,6 @@ def gradient_penalty(img, f_img, m):
 class PatchNCELoss:
     def __init__(self, nce_temp=0.07, nce_lambda=1.0):
         # Potential: only supports for batch_size=1 now.
-        super().__init__()
         self.nce_temp = nce_temp
         self.nce_lambda = nce_lambda
         self.cross_entropy_loss = tf.keras.losses.CategoricalCrossentropy(
@@ -135,7 +134,7 @@ class PatchNCELoss:
             diagonal = tf.eye(n_patches, dtype=tf.bool)
             target = tf.where(diagonal, 1.0, 0.0)
 
-            loss = self.cross_entropy_loss(target + 1e-6, logit + 1e-6) * self.nce_lambda
+            loss = self.cross_entropy_loss(target, logit) * self.nce_lambda
             total_nce_loss += tf.reduce_mean(loss)
         return total_nce_loss / len(feat_source_pool)
 

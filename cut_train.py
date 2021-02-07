@@ -68,7 +68,7 @@ gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
-
+tf.random.set_seed(128)
 train_A, train_B = \
     TFRecordsGAN(
         tfrecord_path=
@@ -239,6 +239,9 @@ def train_step(real_x, real_y, n_critic=5, nce_identity=True):
     # Calculate the gradients for generator and discriminator
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
     generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+
+    mlp_gradients = tape.gradient(patch_nce_loss, mlp.trainable_variables)
+    generator_optimizer.apply_gradients(zip(mlp_gradients, mlp.trainable_variables))
     if gan_mode != "wgan_gp":
         discriminator_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
