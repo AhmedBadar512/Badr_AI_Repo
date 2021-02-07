@@ -56,7 +56,8 @@ IMG_WIDTH = args.width
 IMG_HEIGHT = args.height
 CROP_HEIGHT = args.c_height if args.c_height < IMG_HEIGHT else IMG_HEIGHT
 CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
-LAMBDA = 1
+LAMBDA = 1 if args.cut_mode == "cut" else 10
+nce_identity = True if args.cut_mode == "cut" else False
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
@@ -203,7 +204,7 @@ def write_to_tensorboard(g_loss, d_loss, patch_nce_loss, c_step, writer):
 
 
 @tf.function
-def train_step(real_x, real_y, n_critic=5, nce_identity=True):
+def train_step(real_x, real_y, n_critic=5):
     # real_x = tf.image.per_image_standardization(real_x)
     # real_x = (real_x / 127.5) - 1
     # real_y = (real_y / 127.5) - 1
