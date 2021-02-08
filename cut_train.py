@@ -228,8 +228,10 @@ def train_step(real_x, real_y, n_critic=5):
             NCE_B_loss = calc_patch_nce_loss(real_y, id_y)
             patch_nce_loss = (patch_nce_loss + NCE_B_loss) * 0.5
 
-        # Total generator loss = adversarial loss + cycle loss
-        total_gen_loss = LAMBDA * patch_nce_loss + identity_loss(real_y, id_y) + gen_loss
+            # Total generator loss = adversarial loss + cycle loss
+            total_gen_loss = LAMBDA * patch_nce_loss + identity_loss(real_y, id_y) + gen_loss
+        else:
+            total_gen_loss = LAMBDA * patch_nce_loss + gen_loss
 
         if gan_mode != "wgan_gp":
             disc_loss = discriminator_loss(disc_real_y, disc_fake_y)
