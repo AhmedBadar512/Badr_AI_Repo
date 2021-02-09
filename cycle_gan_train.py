@@ -195,30 +195,30 @@ def write_to_tensorboard(g_loss_g, g_loss_f, d_loss_x, d_loss_y, c_step, writer)
         else:
             img_a = image_x
             img_b = image_y
-        img_size_a, img_size_b = img_a.shape[1] * img_a.shape[2] * img_a.shape[3], img_b.shape[1] * img_b.shape[2] * \
-                                 img_b.shape[3]
-        mean_a, mean_b = tf.reduce_mean(img_a, axis=[1, 2, 3], keepdims=True), tf.reduce_mean(img_b, axis=[1, 2, 3],
-                                                                                              keepdims=True)
-        adjusted_std_a = tf.maximum(tf.math.reduce_std(img_a, axis=[1, 2, 3], keepdims=True),
-                                    1 / tf.sqrt(img_size_a / 1.0))
-        adjusted_std_b = tf.maximum(tf.math.reduce_std(img_b, axis=[1, 2, 3], keepdims=True),
-                                    1 / tf.sqrt(img_size_b / 1.0))
-        f_image_y = generator_g((img_a - mean_a) / adjusted_std_a, training=True)
-        f_image_x = generator_f((img_b - mean_b) / adjusted_std_b, training=True)
+        # img_size_a, img_size_b = img_a.shape[1] * img_a.shape[2] * img_a.shape[3], img_b.shape[1] * img_b.shape[2] * \
+        #                          img_b.shape[3]
+        # mean_a, mean_b = tf.reduce_mean(img_a, axis=[1, 2, 3], keepdims=True), tf.reduce_mean(img_b, axis=[1, 2, 3],
+        #                                                                                       keepdims=True)
+        # adjusted_std_a = tf.maximum(tf.math.reduce_std(img_a, axis=[1, 2, 3], keepdims=True),
+        #                             1 / tf.sqrt(img_size_a / 1.0))
+        # adjusted_std_b = tf.maximum(tf.math.reduce_std(img_b, axis=[1, 2, 3], keepdims=True),
+        #                             1 / tf.sqrt(img_size_b / 1.0))
+        f_image_y = generator_g(img_a, training=True)
+        f_image_x = generator_f(img_b, training=True)
         confidence_a = discriminator_x(f_image_x, training=True)
         confidence_b = discriminator_y(f_image_y, training=True)
-        tf.summary.image("img_a", img_a, step=c_step)
-        tf.summary.image("img_b", img_b, step=c_step)
-        tf.summary.image("fake_img_a", (f_image_x * adjusted_std_b) + mean_b, step=c_step)
-        tf.summary.image("fake_img_b", (f_image_y * adjusted_std_a) + mean_a, step=c_step)
+        tf.summary.image("img_a", tf.cast(127.5 * (img_a + 1), dtype=tf.uint8), step=c_step)
+        tf.summary.image("img_b", tf.cast(127.5 * (img_b + 1), dtype=tf.uint8), step=c_step)
+        tf.summary.image("fake_img_a", tf.cast((f_image_x + 1) * 127.5, dtype=tf.uint8), step=c_step)
+        tf.summary.image("fake_img_b", tf.cast((f_image_y + 1) * 127.5, dtype=tf.uint8), step=c_step)
         tf.summary.image("confidence_a", confidence_a, step=c_step)
         tf.summary.image("confidence_b", confidence_b, step=c_step)
 
 
 @tf.function
 def train_step(real_x, real_y, n_critic=5):
-    real_x = tf.image.per_image_standardization(real_x)
-    real_y = tf.image.per_image_standardization(real_y)
+    # real_x = tf.image.per_image_standardization(real_x)
+    # real_y = tf.image.per_image_standardization(real_y)
     with tf.GradientTape(persistent=True) as tape:
         fake_y = generator_g(real_x, training=True)
         cycled_x = generator_f(fake_y, training=True)

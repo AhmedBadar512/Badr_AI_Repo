@@ -16,6 +16,8 @@ def get_loss(name='cross_entropy'):
         loss_func = RMI(rmi_radius=3, reduction=K.losses.Reduction.NONE, from_logits=True)
     elif name == "Wasserstein":
         loss_func = WasserSteinLoss(reduction=K.losses.Reduction.NONE)
+    elif name == "PatchNCELoss":
+        loss_func = PatchNCELoss(nce_temp=0.07, nce_lambda=1.0)
     else:
         loss_func = lambda real_image, cycled_image: tf.reduce_mean(tf.abs(real_image - cycled_image))
     return loss_func
@@ -105,6 +107,36 @@ def gradient_penalty(img, f_img, m):
     slopes = tf.sqrt(tf.reduce_sum(tf.square(grads), axis=[1, 2, 3]))
     grad_l2 = tf.reduce_mean(tf.square(1 - slopes))
     return grad_l2
+
+
+class PatchNCELoss:
+    def __init__(self, nce_temp=0.07, nce_lambda=1.0):
+        # Potential: only supports for batch_size=1 now.
+        self.nce_temp = nce_temp
+        self.nce_lambda = nce_lambda
+        self.cross_entropy_loss = tf.keras.losses.CategoricalCrossentropy(
+                                        reduction=tf.keras.losses.Reduction.NONE,
+                                        from_logits=True)
+
+    def __call__(self, source, target, netE, netF):
+        feat_source = netE(source, training=True)
+        feat_target = netE(target, training=True)
+
+        feat_source_pool, sample_ids = netF(feat_source, patch_ids=None, training=True)
+        feat_target_pool, _ = netF(feat_target, patch_ids=sample_ids, training=True)
+
+        total_nce_loss = 0.0
+        for feat_s, feat_t in zip(feat_source_pool, feat_target_pool):
+            n_patches, dim = feat_s.shape
+
+            logit = tf.matmul(feat_s, tf.transpose(feat_t)) / self.nce_temp
+
+            diagonal = tf.eye(n_patches, dtype=tf.bool)
+            target = tf.where(diagonal, 1.0, 0.0)
+
+            loss = self.cross_entropy_loss(target, logit) * self.nce_lambda
+            total_nce_loss += tf.reduce_mean(loss)
+        return total_nce_loss / len(feat_source_pool)
 
 
 if __name__ == "__main__":

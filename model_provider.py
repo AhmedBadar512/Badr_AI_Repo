@@ -3,6 +3,7 @@ from models.bisenet import *
 from models.unet import *
 from models.faceswap_gan import *
 from models.cycle_gan import *
+from models.cut import *
 
 __all__ = ['get_model']
 
@@ -19,6 +20,10 @@ _ganmodels = {
     'cyclegan_disc': CycleGANDiscriminator,
     'faceswap_gen': FaceSwapGenerator,
     'faceswap_disc': FaceSwapDiscriminator,
+    'cut_gen': CUTGenerator,
+    'cut_disc': CUTDiscriminator,
+    'cut_enc': CUTEncoder,
+    'cut_mlp': PatchSampleMLP
 }
 
 
