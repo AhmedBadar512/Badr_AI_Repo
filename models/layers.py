@@ -36,6 +36,7 @@ class ConvBlock(K.layers.Layer):
                  use_bias=True,
                  norm_layer=None,
                  activation='linear',
+                 sn=False,
                  **kwargs):
         super(ConvBlock, self).__init__(**kwargs)
         initializer = tf.random_normal_initializer(0., 0.02)
@@ -45,6 +46,8 @@ class ConvBlock(K.layers.Layer):
                                       padding,
                                       use_bias=use_bias,
                                       kernel_initializer=initializer)
+        if sn:
+            self.conv2d = tfa.layers.SpectralNormalization(self.conv2d)
         self.activation = K.layers.Activation(activation)
         if norm_layer == 'batch':
             self.normalization = K.layers.BatchNormalization()
