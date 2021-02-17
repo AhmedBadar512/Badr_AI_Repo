@@ -17,7 +17,7 @@ tfd = tfp.distributions
 
 
 class SPADE(K.layers.Layer):
-    def __init__(self, channels, sn=False, activation=None, segmap_shape=(1, 256, 256, 3)):
+    def __init__(self, channels, sn=False, activation=None):
         super().__init__()
         self.conv1 = K.layers.Conv2D(128, 5, 1, padding="SAME", activation="relu")
         self.conv_gamma = K.layers.Conv2D(channels, 5, 1, padding="SAME")
@@ -27,15 +27,17 @@ class SPADE(K.layers.Layer):
             self.conv_gamma = tfa.layers.SpectralNormalization(self.conv_gamma)
             self.conv_beta = tfa.layers.SpectralNormalization(self.conv_beta)
         self.activation = activation
-        self.segmap_shape = tf.constant(segmap_shape[1:3], dtype=tf.int32)
+        # self.segmap_shape = tf.constant(segmap_shape[1:3], dtype=tf.int32)
         # self.avg_pool = lambda feature, strides: K.layers.AveragePooling2D(3, strides=strides, padding="SAME")(feature)
 
     def build(self, input_shape):
-        self.avg_pool = K.layers.AveragePooling2D(3, strides=self.segmap_shape//tf.constant(input_shape[1:3]), padding="SAME")
+        strides = tf.constant(input_shape[1][1:3])//tf.constant(input_shape[0][1:3])
+        self.avg_pool = K.layers.AveragePooling2D(3, strides=strides.numpy(), padding="SAME")
 
-    def call(self, inputs, segmap, **kwargs):
-        mean, var = tf.nn.moments(inputs, axes=[1, 2], keepdims=True)
-        x = (inputs - mean) / tf.sqrt(var + 1e-5)
+    def call(self, inputs, **kwargs):
+        feature, segmap = inputs
+        mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
+        x = (feature - mean) / tf.sqrt(var + 1e-5)
         segmap_processed = self.avg_pool(segmap)
         # new_shp = tf.shape(segmap)[1:3] // (tf.shape(segmap)[1:3] // tf.shape(x)[1:3])
         # segmap_processed = tf.image.resize(segmap, new_shp)
@@ -49,40 +51,40 @@ class SPADE(K.layers.Layer):
 
 
 class SPADEResBlock(K.Model):
-    def __init__(self, channels, sn=False, segmap_shape=(1, 256, 256, 3)):
+    def __init__(self, channels, sn=False):
         super().__init__()
         self.channels = channels
         self.sn = sn
-        self.segmap_shape = segmap_shape
 
     def build(self, input_shape):
-        channels_middle = tf.minimum(self.channels, input_shape[-1])
-        self.spade1 = SPADE(input_shape[-1], activation=tf.nn.leaky_relu, sn=False, segmap_shape=self.segmap_shape)
+        channels_middle = tf.minimum(self.channels, input_shape[0][-1]).numpy()
+        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=False)
         self.conv1 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
         if self.sn:
             self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
-        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False, segmap_shape=self.segmap_shape)
+        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False)
         if self.sn:
             self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(channels_middle, 3, 1, padding="SAME"))
         else:
             self.conv2 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
-        if self.channels != input_shape[-1]:
-            self.spade3 = SPADE(input_shape[-1], sn=False, segmap_shape=self.segmap_shape)
+        if self.channels != input_shape[0][-1]:
+            self.spade3 = SPADE(input_shape[0][-1], sn=False)
             if self.sn:
                 self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
             else:
                 self.conv3 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME")
 
-    def call(self, inputs, segmap, training=None, mask=None):
-        x = self.spade1(inputs, segmap)
+    def call(self, inputs, training=None, mask=None):
+        feature, segmap = inputs
+        x = self.spade1((feature, segmap))
         x = self.conv1(x)
-        x = self.spade2(x, segmap)
+        x = self.spade2((x, segmap))
         x = self.conv2(x)
-        if self.channels != inputs.shape[-1]:
-            x_branch = self.spade3(inputs, segmap)
+        if self.channels != inputs[0].shape[-1]:
+            x_branch = self.spade3((feature, segmap))
             x_branch = self.conv3(x_branch)
             return x_branch + x
-        return x + inputs
+        return x + feature
 
 
 class GAUEncoder(K.Model):
@@ -127,44 +129,44 @@ class GAUEncoder(K.Model):
 
 
 class GAUGenerator(K.Model):
-    def __init__(self, channels=1024, num_up_layers=6, sn=True, segmap_shape=(1, 256, 256, 3)):
+    def __init__(self, channels=1024, num_up_layers=6, sn=True):
         super().__init__()
         self.num_up_layers = num_up_layers
         self.channels = channels
         self.sn = sn
         self.upsample = K.layers.UpSampling2D((2, 2))
-        self.segmap_shape = segmap_shape
-        self.spade_resblock1 = SPADEResBlock(channels=channels, sn=self.sn, segmap_shape=self.segmap_shape)
-        self.spade_resblock2 = SPADEResBlock(channels=channels, sn=self.sn, segmap_shape=self.segmap_shape)
-        self.spade_resblock3 = SPADEResBlock(channels=channels, sn=self.sn, segmap_shape=self.segmap_shape)
-        self.spade_resblocks = [SPADEResBlock(channels=channels // 2, sn=self.sn, segmap_shape=self.segmap_shape),
-                                SPADEResBlock(channels=channels // 4, sn=self.sn, segmap_shape=self.segmap_shape),
-                                SPADEResBlock(channels=channels // 8, sn=self.sn, segmap_shape=self.segmap_shape),
-                                SPADEResBlock(channels=channels // 16, sn=self.sn, segmap_shape=self.segmap_shape)]
+        self.spade_resblock1 = SPADEResBlock(channels=channels, sn=self.sn)
+        self.spade_resblock2 = SPADEResBlock(channels=channels, sn=self.sn)
+        self.spade_resblock3 = SPADEResBlock(channels=channels, sn=self.sn)
+        self.spade_resblocks = [SPADEResBlock(channels=channels // 2, sn=self.sn),
+                                SPADEResBlock(channels=channels // 4, sn=self.sn),
+                                SPADEResBlock(channels=channels // 8, sn=self.sn),
+                                SPADEResBlock(channels=channels // 16, sn=self.sn)]
         if self.num_up_layers > 6:
-            self.spade_resblock4 = SPADEResBlock(channels=channels // 32, sn=self.sn, segmap_shape=self.segmap_shape)
+            self.spade_resblock4 = SPADEResBlock(channels=channels // 32, sn=self.sn)
         self.final_conv = K.layers.Conv2D(3, 3, 1, padding="SAME", activation=K.activations.tanh)
 
-    def custom_build(self, input_shape):
-        self.z_height, self.z_width = input_shape[1] // (pow(2, self.num_up_layers)), input_shape[2] // (
+    def build(self, input_shape):
+        self.z_height, self.z_width = input_shape[1][1] // (pow(2, self.num_up_layers)), input_shape[1][2] // (
             pow(2, self.num_up_layers))
         self.fc1 = Dense(self.z_height * self.z_width * self.channels)
 
-    def call(self, inputs, segmap, training=None, mask=None):
-        x = self.fc1(inputs)
+    def call(self, inputs, training=None, mask=None):
+        features, segmap = inputs
+        x = self.fc1(features)
         x = tf.reshape(x, (-1, self.z_height, self.z_width, self.channels))
-        x = self.spade_resblock1(x, segmap)
+        x = self.spade_resblock1([x, segmap])
         x = self.upsample(x)
-        x = self.spade_resblock2(x, segmap)
+        x = self.spade_resblock2([x, segmap])
         if self.num_up_layers > 5:
             x = self.upsample(x)
-        x = self.spade_resblock3(x, segmap)
+        x = self.spade_resblock3([x, segmap])
         for spade_blk in self.spade_resblocks:
             x = self.upsample(x)
-            x = spade_blk(x, segmap)
+            x = spade_blk([x, segmap])
         if self.num_up_layers > 6:
             x = self.upsample(x)
-            x = self.spade_resblock4(x, segmap)
+            x = self.spade_resblock4([x, segmap])
         x = tf.nn.leaky_relu(x)
         x = self.final_conv(x)
         return x
@@ -176,18 +178,19 @@ class GAUDiscriminator(K.Model):
         self.conv1 = [K.layers.Conv2D(channels, 4, 2, padding="SAME", activation=tf.nn.leaky_relu)
                       for _ in range(n_scale)]
         self.conv2s = [
-            [ConvBlock(tf.minimum(channels * (2 ** n), 512), 4, strides=1 if n == (n_dis - 1) else 2,
+            [ConvBlock(tf.minimum(channels * (2 ** n), 512).numpy(), 4, strides=1 if n == (n_dis - 1) else 2,
                        padding="SAME", activation=tf.nn.relu, sn=True)
              for n in range(1, n_dis)] for _ in range(n_scale)]
         self.conv_final = [K.layers.Conv2D(1, 4, 1, padding="SAME", activation=tf.nn.leaky_relu)
                            for _ in range(n_scale)]
         self.downsample = K.layers.AveragePooling2D(3, 2, padding="same")
 
-    def call(self, inputs, segmap, training=None, mask=None):
+    def call(self, inputs, training=None, mask=None):
+        img, segmap = inputs
         outputs = []
         for conv1, conv2s, conv_final in zip(self.conv1, self.conv2s, self.conv_final):
             features = []
-            x = tf.concat([inputs, segmap], axis=-1)
+            x = tf.concat([img, segmap], axis=-1)
             x = conv1(x, training=training)
             features.append(x)
             for conv2 in conv2s:
@@ -196,7 +199,7 @@ class GAUDiscriminator(K.Model):
             x = conv_final(x, training=training)
             features.append(x)
             outputs.append(features)
-            inputs = self.downsample(inputs)
+            img = self.downsample(img)
             segmap = self.downsample(segmap)
         return outputs
 
@@ -222,12 +225,15 @@ if __name__ == "__main__":
     enc = GAUEncoder()
     gen = GAUGenerator()
     disc = GAUDiscriminator()
-    gen.custom_build((1, 256, 256, 3))
-    i = tf.random.uniform((1, 256, 256, 3))
-    s = tf.random.uniform((1, 256, 256, 3))
+    # gen.custom_build((1, 256, 256, 3))
+    i = tf.random.uniform((1, 256, 512, 3))
+    s = tf.random.uniform((1, 256, 512, 3))
     v_out, _, _ = enc(i, training=True)
-    g_out = gen(v_out, s)
-    d_out = disc(i, s)
+    g_out = gen([v_out, s])
+    d_out = disc([i, s])
+    # K.models.save_model(gen, "here")
+    # K.models.save_model(disc, "here")
+    # K.models.save_model(disc, "enc")
 
     # a = generator_loss(d_out)
     # b = vgg_loss(i, g_out)
@@ -237,5 +243,5 @@ if __name__ == "__main__":
     # print(v_out.shape)
     # print(c)
     print(gen.summary())
-    # print(disc.summary())
-    # print(enc.summary())
+    print(disc.summary())
+    print(enc.summary())

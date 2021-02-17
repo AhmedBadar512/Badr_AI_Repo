@@ -205,12 +205,11 @@ with mirrored_strategy.scope():
                   dtype=tf.float32)
     tmp1 = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, args.classes), dtype=tf.float32, minval=0, maxval=1),
                    dtype=tf.float32)
-    generator = get_model("{}_gen".format(MODEL), type="gan", segmap_shape=tmp1.shape)
+    generator = get_model("{}_gen".format(MODEL), type="gan")
     discriminator = get_model("{}_disc".format(MODEL), type="gan")
     encoder = get_model("{}_enc".format(MODEL), type="gan")
-    generator.custom_build(input_shape=(1, CROP_HEIGHT, CROP_WIDTH, args.classes))
     enc_out = encoder(tmp)
-    generator(enc_out, tmp1), discriminator(tmp, tmp1)
+    generator((enc_out, tmp1)), discriminator((tmp, tmp1))
     generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
     discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
 
@@ -262,7 +261,7 @@ def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc
         #                             1 / tf.sqrt(img_size_a / 1.0))
         # f_image = generator((img_a - mean_a) / adjusted_std_a, training=True)
         enc_out = encoder(img)
-        f_image = generator(enc_out, seg, training=True)
+        f_image = generator((enc_out, seg), training=True)
         tf.summary.image("Img", img + 1, step=c_step)
         tf.summary.image("Seg", colorize(processed_labs[..., tf.newaxis]),
                          step=c_step)  # TODO: Add color segmentation here
@@ -279,8 +278,8 @@ def train_step(mini_batch, random_style=False, n_critic=5):
             enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
         else:
             enc_vector, enc_vector_mean, enc_vector_logvar = encoder(img, training=True)
-        fake_img = generator(enc_vector, seg)
-        disc_real, disc_fake = discriminator(img, seg), discriminator(fake_img, seg)
+        fake_img = generator((enc_vector, seg))
+        disc_real, disc_fake = discriminator((img, seg)), discriminator((fake_img, seg))
 
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(disc_fake)
@@ -372,13 +371,15 @@ for epoch in range(START_EPOCH, EPOCHS):
         n += 1
         with train_writer.as_default():
             tf.summary.scalar("G Learning Rate", g_lrs(c_step).numpy(),
-                              c_step) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate",
-                                                                                                      g_lrs,
-                                                                                                      c_step)
+                              c_step) if LEARNING_RATE_SCHEDULER != "constant" \
+                else tf.summary.scalar("G Learning Rate",
+                                       g_lrs,
+                                       c_step)
             tf.summary.scalar("D Learning Rate", d_lrs(c_step).numpy(),
-                              c_step) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate",
-                                                                                                      d_lrs,
-                                                                                                      c_step)
+                              c_step) if LEARNING_RATE_SCHEDULER != "constant" \
+                else tf.summary.scalar("D Learning Rate",
+                                       d_lrs,
+                                       c_step)
         if n % 20 == 0:
             write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
                                  c_step, train_writer)
