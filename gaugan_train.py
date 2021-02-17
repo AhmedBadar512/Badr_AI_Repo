@@ -33,7 +33,7 @@ args.add_argument("-cm", "--cut_mode", type=str, default="cut", help="Select tra
 args.add_argument("-e", "--epochs", type=int, default=1000, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
-args.add_argument("-bs", "--batch_size", type=int, default=2, help="Size of mini-batch")
+args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-m", "--model", type=str, default="gaugan", help="Select model")
 args.add_argument("-logs", "--logdir", type=str, default="./logs_gaugan", help="Directory to save tensorboard logdir")
@@ -182,13 +182,19 @@ def calc_feature_loss(real_features_list, fake_features_list):
 
 
 if LEARNING_RATE_SCHEDULER == "poly":
-    lrs = K.optimizers.schedules.PolynomialDecay(LEARNING_RATE,
-                                                 decay_steps=EPOCHS,
-                                                 end_learning_rate=1e-8, power=0.8)
+    g_lrs = K.optimizers.schedules.PolynomialDecay(G_LEARNING_RATE,
+                                                   decay_steps=EPOCHS,
+                                                   end_learning_rate=1e-8, power=0.8)
+    d_lrs = K.optimizers.schedules.PolynomialDecay(D_LEARNING_RATE,
+                                                   decay_steps=EPOCHS,
+                                                   end_learning_rate=1e-8, power=0.8)
 elif LEARNING_RATE_SCHEDULER == "exp_decay":
-    lrs = K.optimizers.schedules.ExponentialDecay(LEARNING_RATE,
-                                                  decay_steps=1e5,
-                                                  decay_rate=0.9)
+    g_lrs = K.optimizers.schedules.ExponentialDecay(G_LEARNING_RATE,
+                                                    decay_steps=1e5,
+                                                    decay_rate=0.9)
+    d_lrs = K.optimizers.schedules.ExponentialDecay(D_LEARNING_RATE,
+                                                    decay_steps=1e5,
+                                                    decay_rate=0.9)
 else:
     g_lrs = G_LEARNING_RATE
     d_lrs = D_LEARNING_RATE
@@ -258,7 +264,8 @@ def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc
         enc_out = encoder(img)
         f_image = generator(enc_out, seg, training=True)
         tf.summary.image("Img", img + 1, step=c_step)
-        tf.summary.image("Seg", colorize(processed_labs[..., tf.newaxis]), step=c_step) #TODO: Add color segmentation here
+        tf.summary.image("Seg", colorize(processed_labs[..., tf.newaxis]),
+                         step=c_step)  # TODO: Add color segmentation here
         tf.summary.image("translated_img", f_image + 1, step=c_step)
 
 
