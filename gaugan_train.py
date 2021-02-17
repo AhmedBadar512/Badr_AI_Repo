@@ -205,8 +205,8 @@ with mirrored_strategy.scope():
     generator.custom_build(input_shape=(1, CROP_HEIGHT, CROP_WIDTH, args.classes))
     enc_out = encoder(tmp)
     generator(enc_out, tmp1), discriminator(tmp, tmp1)
-    generator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.0, beta_2=0.999)
-    discriminator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.0, beta_2=0.999)
+    generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
+    discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
 
 
 def calc_vgg_loss(real, fake):
