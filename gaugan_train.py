@@ -1,8 +1,10 @@
 import tensorflow as tf
 import json
 from model_provider import get_model
-from utils.create_gan_tfrecords import TFRecordsGAN
-from utils.augment_images import augment_autoencoder
+from visualization_dicts import gpu_cs_labels, generate_random_colors, gpu_random_labels
+from seg_visualizer import get_images_custom
+from utils.create_seg_tfrecords import TFRecordsSeg
+from utils.augment_images import augment_seg
 import os
 import tensorflow.keras as K
 import datetime
@@ -16,9 +18,10 @@ for gpu in physical_devices:
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("-d", "--dataset", type=str, default="zebra2horse",
+args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
                   help="Name a dataset from the tf_dataset collection",
-                  choices=["zebra2horse"])
+                  choices=["cityscapes19"])
+args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select learning rate scheduler",
@@ -39,13 +42,21 @@ args.add_argument("-l_m", "--load_model", type=str,
                   help="Load model from path")
 args.add_argument("-s", "--save_dir", type=str, default="./gaugan_runs",
                   help="Save directory for models and tensorboard")
-args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_gan_tfrecords",
+args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_segmentation_tfrecords",
                   help="Save directory that contains train and validation tfrecords")
-args.add_argument("-sb", "--shuffle_buffer", type=int, default=1024, help="Size of the shuffle buffer")
-args.add_argument("--width", type=int, default=286, help="Size of the shuffle buffer")
+args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
+args.add_argument("--width", type=int, default=584, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=286, help="Size of the shuffle buffer")
-args.add_argument("--c_width", type=int, default=256, help="Crop width")
+args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
+# ============ Augmentation Arguments ===================== #
+args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
+args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
+args.add_argument("--random_hue", action="store_true", default=False, help="Randomly change hue")
+args.add_argument("--random_saturation", action="store_true", default=False, help="Randomly change saturation")
+args.add_argument("--random_brightness", action="store_true", default=False, help="Randomly change brightness")
+args.add_argument("--random_contrast", action="store_true", default=False, help="Randomly change contrast")
+args.add_argument("--random_quality", action="store_true", default=False, help="Randomly change jpeg quality")
 args = args.parse_args()
 
 tf_record_path = args.tf_record_path
@@ -60,6 +71,7 @@ LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 1, 10, 10, 0.05
 nce_identity = True if args.cut_mode == "cut" else False
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
+G_LEARNING_RATE, D_LEARNING_RATE = 1e-4, 4e-4
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
 save_interval = args.save_interval
 save_dir = args.save_dir
@@ -70,34 +82,50 @@ time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
 tf.random.set_seed(128)
-train_A, train_B = \
-    TFRecordsGAN(
-        tfrecord_path=
-        "{}/{}_train.tfrecords".format(tf_record_path, dataset + "_a")).read_tfrecords(), \
-    TFRecordsGAN(
-        tfrecord_path=
-        "{}/{}_train.tfrecords".format(tf_record_path, dataset + "_b")).read_tfrecords()
+# =========== Load Dataset ============ #
 
-with open("/data/input/datasets/tf2_gan_tfrecords/data_samples.json") as f:
-    data = json.load(f)
-num_samples_ab = [data[dataset + "_a"], data[dataset + "_b"]]
-if num_samples_ab[0] < num_samples_ab[1]:
-    total_samples = num_samples_ab[0]
-    # train_B = train_B.repeat()
+if dataset == "cityscapes19":
+    cs_19 = True
+    dataset = "cityscapes"
 else:
-    total_samples = num_samples_ab[1]
-    # train_A = train_A.repeat()
+    cs_19 = False
+if not cs_19:
+    cmap = generate_random_colors(bg_class=args.bg_class)
 
-augmentor = lambda batch: augment_autoencoder(batch, size=(IMG_HEIGHT, IMG_WIDTH), crop=(CROP_HEIGHT, CROP_WIDTH))
-train_A = train_A.map(
-    augmentor, num_parallel_calls=tf.data.AUTOTUNE).shuffle(
-    BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
+dataset_train = TFRecordsSeg(
+    tfrecord_path=
+    "{}/{}_train.tfrecords".format(args.tf_record_path, dataset)).read_tfrecords()
+dataset_validation = TFRecordsSeg(
+    tfrecord_path=
+    "{}/{}_val.tfrecords".format(args.tf_record_path, dataset)).read_tfrecords()
+augmentor = lambda image, label: augment_seg(image, label,
+                                             args.flip_up_down,
+                                             args.flip_left_right,
+                                             (CROP_HEIGHT, CROP_WIDTH),
+                                             args.random_hue,
+                                             args.random_saturation,
+                                             args.random_brightness,
+                                             args.random_contrast,
+                                             args.random_quality)
+with open("/data/input/datasets/tf2_segmentation_tfrecords/data_samples.json") as f:
+    data = json.load(f)
+total_samples = data[dataset]
+# =========== Process dataset ============ #
+assert dataset_train is not None, "Training dataset can not be None"
+assert dataset_validation is not None, "Either test or validation dataset should not be None"
 
-train_B = train_B.map(
-    augmentor, num_parallel_calls=tf.data.AUTOTUNE).shuffle(
-    BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
-train_A = mirrored_strategy.experimental_distribute_dataset(train_A)
-train_B = mirrored_strategy.experimental_distribute_dataset(train_B)
+eval_dataset = dataset_validation
+get_images_processed = lambda image, label: get_images_custom(image, label, (args.height, args.width), cs_19)
+
+processed_train = dataset_train.map(get_images_processed)
+processed_train = processed_train.map(augmentor)
+processed_val = dataset_validation.map(get_images_processed)
+processed_train = processed_train.shuffle(args.shuffle_buffer).batch(BATCH_SIZE, drop_remainder=True).prefetch(
+    tf.data.experimental.AUTOTUNE)
+processed_val = processed_val.shuffle(args.shuffle_buffer).batch(BATCH_SIZE, drop_remainder=True) \
+    if (dataset_validation is not None) else None
+processed_train = mirrored_strategy.experimental_distribute_dataset(processed_train)
+processed_val = mirrored_strategy.experimental_distribute_dataset(processed_val)
 
 if gan_mode == "hinge":
     gan_loss_obj = get_loss(name="Wasserstein")
@@ -136,8 +164,8 @@ def generator_loss(generated_list):
     for generated in generated_list:
         generated = generated[-1]
         total_loss += (tf.reduce_mean(
-        gan_loss_obj(-tf.ones_like(generated), generated)) if gan_mode == "wgan_gp" or gan_mode == "hinge"
-                         else tf.reduce_mean(gan_loss_obj(-tf.ones_like(generated), generated)))
+            gan_loss_obj(-tf.ones_like(generated), generated)) if gan_mode == "wgan_gp" or gan_mode == "hinge"
+                       else tf.reduce_mean(gan_loss_obj(-tf.ones_like(generated), generated)))
     return LAMBDA_ADV * total_loss
 
 
@@ -162,22 +190,23 @@ elif LEARNING_RATE_SCHEDULER == "exp_decay":
                                                   decay_steps=1e5,
                                                   decay_rate=0.9)
 else:
-    lrs = LEARNING_RATE
+    g_lrs = G_LEARNING_RATE
+    d_lrs = D_LEARNING_RATE
 
 with mirrored_strategy.scope():
     vgg_loss = get_loss(name="VGGLoss")
     tmp = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, 3), dtype=tf.float32, minval=0, maxval=1),
                   dtype=tf.float32)
-    tmp1 = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, 3), dtype=tf.float32, minval=0, maxval=1),
+    tmp1 = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, args.classes), dtype=tf.float32, minval=0, maxval=1),
                    dtype=tf.float32)
     generator = get_model("{}_gen".format(MODEL), type="gan", segmap_shape=tmp1.shape)
     discriminator = get_model("{}_disc".format(MODEL), type="gan")
     encoder = get_model("{}_enc".format(MODEL), type="gan")
-    generator.custom_build(input_shape=(1, CROP_HEIGHT, CROP_WIDTH, 3))
+    generator.custom_build(input_shape=(1, CROP_HEIGHT, CROP_WIDTH, args.classes))
     enc_out = encoder(tmp)
     generator(enc_out, tmp1), discriminator(tmp, tmp1)
-    generator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.5)
-    discriminator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.5)
+    generator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.0, beta_2=0.999)
+    discriminator_optimizer = tf.keras.optimizers.Adam(lrs, beta_1=0.0, beta_2=0.999)
 
 
 def calc_vgg_loss(real, fake):
@@ -204,18 +233,22 @@ else:
 
 def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss, c_step, writer):
     with writer.as_default():
+        colorize = lambda img: tf.cast(tf.squeeze(gpu_cs_labels(img)), dtype=tf.uint8) if cs_19 else \
+            lambda img: tf.cast(tf.squeeze(gpu_random_labels(img, cmap)), dtype=tf.uint8)
         tf.summary.scalar("G_Adv_Loss", g_adv_loss.numpy(), c_step)
         tf.summary.scalar("G_kl_Loss", g_kl_loss.numpy(), c_step)
         tf.summary.scalar("G_VGG_Loss", g_vgg_loss.numpy(), c_step)
         tf.summary.scalar("G_feat_Loss", g_feautre_loss.numpy(), c_step)
         tf.summary.scalar("D_Loss", tf.reduce_mean(disc_loss).numpy(), c_step)
         if len(physical_devices) > 1:
-            o_img = tf.cast(image.values[0], dtype=tf.float32)
-            o_seg = tf.cast(segmentation.values[0], dtype=tf.float32)
-            img, seg = o_img, o_seg
+            o_img = tf.cast(tf.concat(mini_batch[0].values, axis=0), dtype=tf.float32) / 127.5 - 1
+            o_seg = tf.cast(tf.concat(mini_batch[1].values, axis=0), dtype=tf.int32)
+            img, seg = o_img, tf.one_hot(o_seg[..., 0], args.classes)
+            processed_labs = tf.concat(mini_batch[1].values, axis=0)
         else:
-            img = image
-            seg = segmentation
+            img = mini_batch[0] / 127.5 - 1
+            seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
+            processed_labs = mini_batch[1]
         # img_size_a, img_size_b = img_a.shape[1] * img_a.shape[2] * img_a.shape[3], img_b.shape[1] * img_b.shape[2] * \
         #                          img_b.shape[3]
         # mean_a = tf.reduce_mean(img_a, axis=[1, 2, 3], keepdims=True)
@@ -224,15 +257,16 @@ def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc
         # f_image = generator((img_a - mean_a) / adjusted_std_a, training=True)
         enc_out = encoder(img)
         f_image = generator(enc_out, seg, training=True)
-        tf.summary.image("Img", tf.cast(127.5 * (img + 1), dtype=tf.uint8), step=c_step)
-        tf.summary.image("Seg", tf.cast(127.5 * (seg + 1), dtype=tf.uint8), step=c_step)
-        tf.summary.image("translated_img", tf.cast((f_image + 1) * 127.5, dtype=tf.uint8), step=c_step)
+        tf.summary.image("Img", img + 1, step=c_step)
+        tf.summary.image("Seg", colorize(processed_labs[..., tf.newaxis]), step=c_step) #TODO: Add color segmentation here
+        tf.summary.image("translated_img", f_image + 1, step=c_step)
 
 
-@tf.function
-def train_step(img, seg, random_style=False, n_critic=5):
+def train_step(mini_batch, random_style=False, n_critic=5):
     # real_x = (real_x / 127.5) - 1
     # real_y = (real_y / 127.5) - 1
+    img = mini_batch[0] / 127.5 - 1
+    seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
     with tf.GradientTape(persistent=True) as tape:
         if random_style:
             enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
@@ -285,9 +319,9 @@ def wgan_disc_apply(fake, real, n_critic):
 
 
 @tf.function
-def distributed_train_step(dist_inputs_x, dist_inputs_y):
+def distributed_train_step(dist_mini_batch):
     pr_g_adv_losses, pr_g_kl_losses, pr_g_vgg_losses, pr_g_feautre_losses, pr_disc_losses = \
-        mirrored_strategy.run(train_step, args=(dist_inputs_x, dist_inputs_y))
+        mirrored_strategy.run(train_step, args=(dist_mini_batch,))
     r_g_adv_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN,
                                             pr_g_adv_losses,
                                             axis=None)
@@ -323,9 +357,9 @@ for epoch in range(START_EPOCH, EPOCHS):
     #     tf.summary.scalar("Learning Rate", lrs(epoch).numpy(),
     #                       epoch) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate", lrs,
     #                                                                                              epoch)
-    for image, segmentation in zip(train_A, train_B):
+    for mini_batch in processed_train:
         c_step = (epoch * total_samples // BATCH_SIZE) + n
-        g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss = distributed_train_step(image, segmentation)
+        g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss = distributed_train_step(mini_batch)
         print("Epoch {} \t Gen_Adv_Loss: {}, KL_Loss: {}, Gen_VGG_Loss: {}, Gen_Feature_Loss: {}, Disc_Loss: {}".format(
             epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss))
         n += 1
