@@ -371,9 +371,13 @@ for epoch in range(START_EPOCH, EPOCHS):
             epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss))
         n += 1
         with train_writer.as_default():
-            tf.summary.scalar("Learning Rate", lrs(c_step).numpy(),
+            tf.summary.scalar("G Learning Rate", g_lrs(c_step).numpy(),
                               c_step) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate",
-                                                                                                      lrs,
+                                                                                                      g_lrs,
+                                                                                                      c_step)
+            tf.summary.scalar("D Learning Rate", d_lrs(c_step).numpy(),
+                              c_step) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate",
+                                                                                                      d_lrs,
                                                                                                       c_step)
         if n % 20 == 0:
             write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
