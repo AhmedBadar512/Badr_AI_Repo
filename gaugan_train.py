@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import tensorflow as tf
 import json
 from model_provider import get_model
@@ -11,6 +12,8 @@ import datetime
 import string
 from losses import get_loss, gradient_penalty
 import argparse
+import psutil
+import sys
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
 for gpu in physical_devices:
@@ -209,9 +212,10 @@ with mirrored_strategy.scope():
     discriminator = get_model("{}_disc".format(MODEL), type="gan")
     encoder = get_model("{}_enc".format(MODEL), type="gan")
     enc_out = encoder(tmp)
-    generator((enc_out, tmp1)), discriminator((tmp, tmp1))
+    generator([enc_out, tmp1]), discriminator([tmp, tmp1])
     generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
     discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
+    del tmp, tmp1, enc_out
 
 
 def calc_vgg_loss(real, fake):
@@ -234,7 +238,7 @@ def load_models(models_parent_dir):
 
 if load_model_path is not None:
     load_models(load_model_path)
-    START_EPOCH = int(load_model_path.split("/")[-1])
+    START_EPOCH = int(load_model_path.split("/")[-1]) - 1
 else:
     START_EPOCH = 0
 
@@ -281,8 +285,8 @@ def train_step(mini_batch, random_style=False, n_critic=5):
             enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
         else:
             enc_vector, enc_vector_mean, enc_vector_logvar = encoder(img, training=True)
-        fake_img = generator((enc_vector, seg))
-        disc_real, disc_fake = discriminator((img, seg)), discriminator((fake_img, seg))
+        fake_img = generator([enc_vector, seg])
+        disc_real, disc_fake = discriminator([img, seg]), discriminator([fake_img, seg])
 
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(disc_fake)
@@ -359,9 +363,33 @@ def save_models():
     print("Model at Epoch {}, saved at {}".format(epoch + 1, os.path.join(save_dir, MODEL, str(epoch + 1))))
 
 
+def backup_and_resume(memory_usage=90):
+    """
+    Added because tfrecords can cause overflow
+    :param memory_usage:
+    :return:
+    """
+    if psutil.virtual_memory().percent > memory_usage:
+        save_models()
+        if '-l_m' in sys.argv:
+            new_arg_index = sys.argv.index('-l_m')
+        elif '--load_model' in sys.argv:
+            new_arg_index = sys.argv.index('--load_model')
+        else:
+            new_arg_index = None
+        if new_arg_index is None:
+            new_args = sys.argv + ['-l_m', os.path.join(save_dir, MODEL, str(epoch + 1))]
+        else:
+            new_args = sys.argv
+            new_args[new_arg_index + 1] = os.path.join(save_dir, MODEL, str(epoch + 1))
+        print(f"Restarting with {new_args} to prevent memory overflow")
+        os.execv(os.path.abspath(sys.argv[0]), new_args)
+
+
 for epoch in range(START_EPOCH, EPOCHS):
     print("\n ----------- Epoch {} --------------\n".format(epoch + 1))
     n = 0
+    backup_and_resume()
     # with train_writer.as_default():
     #     tf.summary.scalar("Learning Rate", lrs(epoch).numpy(),
     #                       epoch) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate", lrs,
@@ -369,8 +397,8 @@ for epoch in range(START_EPOCH, EPOCHS):
     for mini_batch in processed_train:
         c_step = (epoch * total_samples // BATCH_SIZE) + n
         g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss = distributed_train_step(mini_batch)
-        print("Epoch {} \t Gen_Adv_Loss: {}, KL_Loss: {}, Gen_VGG_Loss: {}, Gen_Feature_Loss: {}, Disc_Loss: {}".format(
-            epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss))
+        print("Epoch {} \t Gen_Adv_Loss: {}, KL_Loss: {}, Gen_VGG_Loss: {}, Gen_Feature_Loss: {}, Disc_Loss: {}, Memory_Usage:{}".format(
+            epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss, psutil.virtual_memory().percent))
         n += 1
         with train_writer.as_default():
             tf.summary.scalar("G Learning Rate", g_lrs(c_step).numpy(),
