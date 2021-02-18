@@ -52,6 +52,7 @@ args.add_argument("--width", type=int, default=584, help="Size of the shuffle bu
 args.add_argument("--height", type=int, default=286, help="Size of the shuffle buffer")
 args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
+args.add_argument("-mem_lim", "--memory_limit", type=int, default=90, help="Restart if RAM exceeds this % of total")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -389,7 +390,7 @@ def backup_and_resume(memory_usage=90):
 for epoch in range(START_EPOCH, EPOCHS):
     print("\n ----------- Epoch {} --------------\n".format(epoch + 1))
     n = 0
-    backup_and_resume()
+    backup_and_resume(args.memory_limit)    # Check and restart if memory limit is approaching
     # with train_writer.as_default():
     #     tf.summary.scalar("Learning Rate", lrs(epoch).numpy(),
     #                       epoch) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate", lrs,
