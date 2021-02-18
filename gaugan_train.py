@@ -223,10 +223,13 @@ def load_models(models_parent_dir):
     assert os.path.exists(models_parent_dir), "The path {} is not valid".format(models_parent_dir)
     p_gen = K.models.load_model(os.path.join(models_parent_dir, "gen"))
     p_disc = K.models.load_model(os.path.join(models_parent_dir, "disc"))
+    p_enc = K.models.load_model(os.path.join(models_parent_dir, "encoder"))
     generator.set_weights(p_gen.get_weights())
     print("Generator loaded successfully")
     discriminator.set_weights(p_disc.get_weights())
     print("Discriminator loaded successfully")
+    encoder.set_weights(p_enc.get_weights())
+    print("Encoder loaded successfully")
 
 
 if load_model_path is not None:
