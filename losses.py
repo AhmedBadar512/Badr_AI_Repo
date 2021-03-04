@@ -64,7 +64,7 @@ class RMI(K.losses.Loss):
         est_variance = y_true_cov - tf.linalg.matmul(A_tp, y_tp_cov, transpose_b=True)
         rmi = 0.5 * self.get_log_det_cholesky(est_variance + self.diag_matrix)
         rmi_per_class = rmi / (self.rmi_radius ** 2)
-        return rmi_per_class
+        return tf.cast(rmi_per_class, dtype=tf.float32)
 
     def get_log_det_cholesky(self, est_variance):
         return 2. * tf.linalg.trace(tf.math.log(tf.linalg.cholesky(est_variance) + 1e-8))
