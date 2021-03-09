@@ -304,7 +304,7 @@ def train_step(mini_batch, random_style=False, n_critic=5):
 
     # ------------------- Disc Cycle -------------------- #
     if gan_mode == "wgan_gp":
-        disc_loss = wgan_disc_apply(fake_img, img, n_critic)
+        disc_loss = wgan_disc_apply(fake_img, img, seg, n_critic)
     # Calculate the gradients for generator and discriminator
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
     generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
@@ -319,13 +319,13 @@ def train_step(mini_batch, random_style=False, n_critic=5):
     return g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss
 
 
-def wgan_disc_apply(fake, real, n_critic):
+def wgan_disc_apply(fake, real, seg, n_critic):
     for _ in range(n_critic):
         with tf.GradientTape(persistent=True) as disc_tape:
-            disc_real = discriminator(real, training=True)
-            disc_fake = discriminator(fake, training=True)
+            disc_real = discriminator((real, seg), training=True)
+            disc_fake = discriminator((fake, seg), training=True)
             disc_loss = discriminator_loss(disc_real, disc_fake) + 10 * gradient_penalty(real, fake,
-                                                                                         discriminator)
+                                                                                         discriminator, seg)
 
         discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
