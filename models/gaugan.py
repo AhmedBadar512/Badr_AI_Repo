@@ -12,9 +12,6 @@ from tensorflow.keras.layers import Dense
 from .layers import ConvBlock, Padding2D, SPADEResBlock
 import tensorflow_probability as tfp
 
-tfpl = tfp.layers
-tfd = tfp.distributions
-
 
 class GAUEncoder(K.Model):
     def __init__(self, channels=64, norm_layer="instance"):
@@ -50,8 +47,6 @@ class GAUEncoder(K.Model):
         loc = self.p_dense(x)
         scale = self.p_dense1(x)
         x = tfp.distributions.Normal(loc, tf.exp(scale * 0.5))
-        # y = self.prob_dense(y)
-        # mean, var = self.fc1(x), self.fc2(x)
         if training:
             return x.sample(), loc, scale
         return x.sample()
@@ -132,21 +127,18 @@ class GAUDiscriminator(K.Model):
             segmap = self.downsample(segmap)
         return outputs
 
-#
-# from losses import get_loss
-# gan_loss_obj = get_loss("Wasserstein")
-# feat_loss = get_loss("FeatureLoss")
-
-
-# def generator_loss(generated_list):
-#     total_loss = 0
-#     for generated in generated_list:
-#         generated = generated[-1]
-#         total_loss += tf.reduce_mean(gan_loss_obj(-tf.ones_like(generated), generated))
-#     return total_loss
-
 
 if __name__ == "__main__":
+    # from losses import get_loss
+    # gan_loss_obj = get_loss("Wasserstein")
+    # feat_loss = get_loss("FeatureLoss")
+
+    # def generator_loss(generated_list):
+    #     total_loss = 0
+    #     for generated in generated_list:
+    #         generated = generated[-1]
+    #         total_loss += tf.reduce_mean(gan_loss_obj(-tf.ones_like(generated), generated))
+    #     return total_loss
     physical_devices = tf.config.experimental.list_physical_devices("GPU")
     for gpu in physical_devices:
         tf.config.experimental.set_memory_growth(gpu, True)
