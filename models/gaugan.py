@@ -9,82 +9,11 @@ import tensorflow_addons as tfa
 
 import tensorflow.keras as K
 from tensorflow.keras.layers import Dense
-from .layers import ConvBlock, Padding2D
+from .layers import ConvBlock, Padding2D, SPADEResBlock
 import tensorflow_probability as tfp
 
 tfpl = tfp.layers
 tfd = tfp.distributions
-
-
-class SPADE(K.layers.Layer):
-    def __init__(self, channels, sn=False, activation=None):
-        super().__init__()
-        self.conv1 = K.layers.Conv2D(128, 5, 1, padding="SAME", activation="relu")
-        self.conv_gamma = K.layers.Conv2D(channels, 5, 1, padding="SAME")
-        self.conv_beta = K.layers.Conv2D(channels, 5, 1, padding="SAME")
-        if sn:
-            self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
-            self.conv_gamma = tfa.layers.SpectralNormalization(self.conv_gamma)
-            self.conv_beta = tfa.layers.SpectralNormalization(self.conv_beta)
-        self.activation = activation
-        # self.segmap_shape = tf.constant(segmap_shape[1:3], dtype=tf.int32)
-        # self.avg_pool = lambda feature, strides: K.layers.AveragePooling2D(3, strides=strides, padding="SAME")(feature)
-
-    def build(self, input_shape):
-        strides = tf.constant(input_shape[1][1:3])//tf.constant(input_shape[0][1:3])
-        self.avg_pool = K.layers.AveragePooling2D(3, strides=strides.numpy(), padding="SAME")
-
-    def call(self, inputs, **kwargs):
-        feature, segmap = inputs
-        mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
-        x = (feature - mean) / tf.sqrt(var + 1e-5)
-        segmap_processed = self.avg_pool(segmap)
-        # new_shp = tf.shape(segmap)[1:3] // (tf.shape(segmap)[1:3] // tf.shape(x)[1:3])
-        # segmap_processed = tf.image.resize(segmap, new_shp)
-        segmap_processed = self.conv1(segmap_processed)
-        segmap_gamma = self.conv_gamma(segmap_processed)
-        segmap_beta = self.conv_beta(segmap_processed)
-        x = x * (1 + segmap_gamma) + segmap_beta
-        if self.activation is not None:
-            x = self.activation(x)
-        return x
-
-
-class SPADEResBlock(K.Model):
-    def __init__(self, channels, sn=False):
-        super().__init__()
-        self.channels = channels
-        self.sn = sn
-
-    def build(self, input_shape):
-        channels_middle = tf.minimum(self.channels, input_shape[0][-1]).numpy()
-        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=False)
-        self.conv1 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
-        if self.sn:
-            self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
-        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False)
-        if self.sn:
-            self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(channels_middle, 3, 1, padding="SAME"))
-        else:
-            self.conv2 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
-        if self.channels != input_shape[0][-1]:
-            self.spade3 = SPADE(input_shape[0][-1], sn=False)
-            if self.sn:
-                self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
-            else:
-                self.conv3 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME")
-
-    def call(self, inputs, training=None, mask=None):
-        feature, segmap = inputs
-        x = self.spade1((feature, segmap))
-        x = self.conv1(x)
-        x = self.spade2((x, segmap))
-        x = self.conv2(x)
-        if self.channels != inputs[0].shape[-1]:
-            x_branch = self.spade3((feature, segmap))
-            x_branch = self.conv3(x_branch)
-            return x_branch + x
-        return x + feature
 
 
 class GAUEncoder(K.Model):
