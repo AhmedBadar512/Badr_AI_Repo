@@ -139,11 +139,11 @@ class ResBlock(K.layers.Layer):
 
 
 class SPADE(K.layers.Layer):
-    def __init__(self, channels, sn=False, activation=None):
+    def __init__(self, channels, sn=False, activation=None, ks=5):
         super().__init__()
-        self.conv1 = K.layers.Conv2D(128, 5, 1, padding="SAME", activation="relu")
-        self.conv_gamma = K.layers.Conv2D(channels, 5, 1, padding="SAME")
-        self.conv_beta = K.layers.Conv2D(channels, 5, 1, padding="SAME")
+        self.conv1 = K.layers.Conv2D(128, ks, 1, padding="SAME", activation="relu")
+        self.conv_gamma = K.layers.Conv2D(channels, ks, 1, padding="SAME")
+        self.conv_beta = K.layers.Conv2D(channels, ks, 1, padding="SAME")
         if sn:
             self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
             self.conv_gamma = tfa.layers.SpectralNormalization(self.conv_gamma)
@@ -173,24 +173,25 @@ class SPADE(K.layers.Layer):
 
 
 class SPADEResBlock(K.Model):
-    def __init__(self, channels, sn=False):
+    def __init__(self, channels, sn=False, ks=5):
         super().__init__()
         self.channels = channels
         self.sn = sn
+        self.ks = ks
 
     def build(self, input_shape):
         channels_middle = tf.minimum(self.channels, input_shape[0][-1]).numpy()
-        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=False)
+        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=False, ks=self.ks)
         self.conv1 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
         if self.sn:
             self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
-        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False)
+        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False, ks=self.ks)
         if self.sn:
-            self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(channels_middle, 3, 1, padding="SAME"))
+            self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
         else:
-            self.conv2 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
+            self.conv2 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME")
         if self.channels != input_shape[0][-1]:
-            self.spade3 = SPADE(input_shape[0][-1], sn=False)
+            self.spade3 = SPADE(input_shape[0][-1], sn=False, ks=self.ks)
             if self.sn:
                 self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
             else:
