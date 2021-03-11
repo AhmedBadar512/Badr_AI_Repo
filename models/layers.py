@@ -6,6 +6,7 @@ import tensorflow_addons as tfa
 class Padding2D(K.layers.Layer):
     """ 2D padding layer.
     """
+
     def __init__(self, padding=(1, 1), pad_type='constant', **kwargs):
         assert pad_type in ['constant', 'reflect', 'symmetric']
         super(Padding2D, self).__init__(**kwargs)
@@ -105,6 +106,7 @@ class ResBlock(K.layers.Layer):
     """ ResBlock is a ConvBlock with skip connections.
     Original Resnet paper (https://arxiv.org/pdf/1512.03385.pdf).
     """
+
     def __init__(self,
                  filters,
                  kernel_size,
@@ -153,7 +155,7 @@ class SPADE(K.layers.Layer):
         # self.avg_pool = lambda feature, strides: K.layers.AveragePooling2D(3, strides=strides, padding="SAME")(feature)
 
     def build(self, input_shape):
-        strides = tf.constant(input_shape[1][1:3])//tf.constant(input_shape[0][1:3])
+        strides = tf.constant(input_shape[1][1:3]) // tf.constant(input_shape[0][1:3])
         self.avg_pool = K.layers.AveragePooling2D(3, strides=strides.numpy(), padding="SAME")
 
     def call(self, inputs, **kwargs):
@@ -193,9 +195,9 @@ class SPADEResBlock(K.Model):
         if self.channels != input_shape[0][-1]:
             self.spade3 = SPADE(input_shape[0][-1], sn=False, ks=self.ks)
             if self.sn:
-                self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
+                self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False))
             else:
-                self.conv3 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME")
+                self.conv3 = K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False)
 
     def call(self, inputs, training=None, mask=None):
         feature, segmap = inputs
@@ -208,3 +210,57 @@ class SPADEResBlock(K.Model):
             x_branch = self.conv3(x_branch)
             return x_branch + x
         return x + feature
+
+
+class ResBlock_D(K.Model):
+    def __init__(self, channels, first=False, up_down="up"):
+        super().__init__()
+        self.channels = channels
+        self.up_down = up_down
+        self.first = first
+        if self.first:
+            self.conv1 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
+        else:
+            if up_down == "up":
+                self.conv1 = K.Sequential([K.layers.LeakyReLU(),
+                                           K.layers.UpSampling2D(),
+                                           tfa.layers.SpectralNormalization(
+                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+            else:
+                self.conv1 = K.Sequential([K.layers.LeakyReLU(),
+                                           tfa.layers.SpectralNormalization(
+                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+        self.conv2 = K.Sequential([K.layers.LeakyReLU(),
+                                   tfa.layers.SpectralNormalization(
+                                       K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+        self.resize = K.layers.UpSampling2D() if up_down == "up" else K.layers.AveragePooling2D()
+
+    def shortcut(self, x):
+        if self.first:
+            if self.up_down == "down":
+                x = self.resize(x)
+            if self.learned_shortcut:
+                x = self.conv_s(x)
+            x_s = x
+        else:
+            if self.up_down == "up":
+                x = self.resize(x)
+            if self.learned_shortcut:
+                x = self.conv_s(x)
+            if self.up_down == "down":
+                x = self.resize(x)
+            x_s = x
+        return x_s
+
+    def build(self, input_shape):
+        self.learned_shortcut = (input_shape[-1] != self.channels)
+        if self.learned_shortcut:
+            self.conv_s = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 1, 1, padding="SAME"))
+
+    def call(self, inputs, training=None, mask=None):
+        x = self.conv1(inputs)
+        x = self.conv2(x)
+        x_s = self.shortcut(inputs)
+        if self.up_down == "down":
+            x = self.resize(x)
+        return x_s + x

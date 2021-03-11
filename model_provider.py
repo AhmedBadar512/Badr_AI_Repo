@@ -5,6 +5,7 @@ from models.faceswap_gan import *
 from models.cycle_gan import *
 from models.cut import *
 from models.gaugan import GAUGenerator, GAUDiscriminator, GAUEncoder
+from models.oasis import OASISGenerator, OASISDiscriminator
 
 __all__ = ['get_model']
 
@@ -28,6 +29,8 @@ _ganmodels = {
     'gaugan_gen': GAUGenerator,
     'gaugan_disc': GAUDiscriminator,
     'gaugan_enc': GAUEncoder,
+    'oasis_gen': OASISGenerator,
+    'oasis_disc': OASISDiscriminator,
 }
 
 
