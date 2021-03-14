@@ -28,8 +28,10 @@ class OASISGenerator(K.Model):
 
     def call(self, inputs, training=None, mask=None):
         segmap = inputs
-        latent_shp = tf.concat([tf.shape(segmap)[:3], [64]], axis=0)
+        latent_shp = [tf.shape(segmap)[0], 1, 1, 64]
         z_latent = tf.random.normal(latent_shp)
+        ones_shp = tf.concat([tf.shape(segmap)[:3], [64]], axis=0)
+        z_latent = tf.ones(ones_shp) * z_latent
         segmap = tf.concat([segmap, z_latent], axis=-1)
         x = tf.image.resize(segmap, self.init_shp, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         x = self.conv(x)

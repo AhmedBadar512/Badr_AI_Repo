@@ -390,28 +390,26 @@ def backup_and_resume(memory_usage=90):
 for epoch in range(START_EPOCH, EPOCHS):
     print("\n ----------- Epoch {} --------------\n".format(epoch + 1))
     n = 0
-    backup_and_resume(args.memory_limit)    # Check and restart if memory limit is approaching
-    # with train_writer.as_default():
-    #     tf.summary.scalar("Learning Rate", lrs(epoch).numpy(),
-    #                       epoch) if LEARNING_RATE_SCHEDULER != "constant" else tf.summary.scalar("Learning Rate", lrs,
-    #                                                                                              epoch)
+    backup_and_resume(args.memory_limit)  # Check and restart if memory limit is approaching
+    with train_writer.as_default():
+        tf.summary.scalar("G Learning Rate", g_lrs(epoch).numpy(),
+                          epoch) if LEARNING_RATE_SCHEDULER != "constant" \
+            else tf.summary.scalar("G Learning Rate",
+                                   g_lrs,
+                                   epoch)
+        tf.summary.scalar("D Learning Rate", d_lrs(epoch).numpy(),
+                          epoch) if LEARNING_RATE_SCHEDULER != "constant" \
+            else tf.summary.scalar("D Learning Rate",
+                                   d_lrs,
+                                   epoch)
     for mini_batch in processed_train:
         c_step = (epoch * total_samples // BATCH_SIZE) + n
         g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss = distributed_train_step(mini_batch)
-        print("Epoch {} \t Gen_Adv_Loss: {}, KL_Loss: {}, Gen_VGG_Loss: {}, Gen_Feature_Loss: {}, Disc_Loss: {}, Memory_Usage:{}".format(
-            epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss, psutil.virtual_memory().percent))
+        print(
+            "Epoch {} \t Gen_Adv_Loss: {}, KL_Loss: {}, Gen_VGG_Loss: {}, Gen_Feature_Loss: {}, Disc_Loss: {}, Memory_Usage:{}".format(
+                epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
+                psutil.virtual_memory().percent))
         n += 1
-        with train_writer.as_default():
-            tf.summary.scalar("G Learning Rate", g_lrs(c_step).numpy(),
-                              c_step) if LEARNING_RATE_SCHEDULER != "constant" \
-                else tf.summary.scalar("G Learning Rate",
-                                       g_lrs,
-                                       c_step)
-            tf.summary.scalar("D Learning Rate", d_lrs(c_step).numpy(),
-                              c_step) if LEARNING_RATE_SCHEDULER != "constant" \
-                else tf.summary.scalar("D Learning Rate",
-                                       d_lrs,
-                                       c_step)
         if n % 20 == 0:
             write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
                                  c_step, train_writer)
