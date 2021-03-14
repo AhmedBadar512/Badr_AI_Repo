@@ -7,7 +7,7 @@ Encoder
 import tensorflow as tf
 
 import tensorflow.keras as K
-from layers import SPADEResBlock, ResBlock_D
+from .layers import SPADEResBlock, ResBlock_D
 
 
 class OASISGenerator(K.Model):
@@ -24,11 +24,12 @@ class OASISGenerator(K.Model):
 
     def build(self, input_shape):
         self.init_shp = tf.cast(input_shape[1:3], dtype=tf.int32) // 2 ** len(self.channels_list)
-        self.latent_shp = (input_shape[0], input_shape[1], input_shape[2], 64)
+        # self.latent_shp = (input_shape[0], input_shape[1], input_shape[2], 64)
 
     def call(self, inputs, training=None, mask=None):
         segmap = inputs
-        z_latent = tf.random.normal(self.latent_shp)
+        latent_shp = tf.concat([tf.shape(segmap)[:3], [64]], axis=0)
+        z_latent = tf.random.normal(latent_shp)
         segmap = tf.concat([segmap, z_latent], axis=-1)
         x = tf.image.resize(segmap, self.init_shp, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         x = self.conv(x)
@@ -80,9 +81,9 @@ if __name__ == "__main__":
     i = tf.random.uniform((1, 256, 256, 3))
     s = tf.random.uniform((1, 256, 256, 19))
     g_out = gen(s)
-    d_out = disc(i)
+    d_out = disc(g_out)
     K.models.save_model(gen, "gen_here")
-    K.models.save_model(disc, "disc_here")
+    # K.models.save_model(disc, "disc_here")
     print(gen.summary())
     print(disc.summary())
     # print(g_out.shape, d_out.shape)
