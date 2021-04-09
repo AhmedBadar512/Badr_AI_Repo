@@ -19,11 +19,11 @@ class OASISGenerator(K.Model):
         self.sn = sn
         self.upsample = K.layers.UpSampling2D((2, 2))
         self.conv = K.layers.Conv2D(channels_list[0], 3, 1, padding="SAME")
-        self.spade_resblocks = [SPADEResBlock(channels=chn, sn=self.sn, ks=3) for chn in channels_list]
+        self.spade_resblocks = [SPADEResBlock(channels=chn, sn=self.sn, ks=3, is_oasis=True) for chn in channels_list]
         self.final_conv = K.layers.Conv2D(3, 3, 1, padding="SAME")
 
     def build(self, input_shape):
-        self.init_shp = tf.cast(input_shape[1:3], dtype=tf.int32) // 2 ** len(self.channels_list)
+        self.init_shp = tf.cast(input_shape[1:3], dtype=tf.int32) // 2 ** (len(self.channels_list) - 1)
         # self.latent_shp = (input_shape[0], input_shape[1], input_shape[2], 64)
 
     def call(self, inputs, training=None, mask=None):
@@ -35,11 +35,12 @@ class OASISGenerator(K.Model):
         segmap = tf.concat([segmap, z_latent], axis=-1)
         x = tf.image.resize(segmap, self.init_shp, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         x = self.conv(x)
-        for spade_blk in self.spade_resblocks:
+        for n, spade_blk in enumerate(self.spade_resblocks):
             x = spade_blk([x, segmap])
-            x = self.upsample(x)
-        x = self.final_conv(x)
+            if n < (len(self.spade_resblocks) - 1):
+                x = self.upsample(x)
         x = tf.nn.leaky_relu(x)
+        x = self.final_conv(x)
         x = tf.nn.tanh(x)
         return x
 
@@ -61,8 +62,11 @@ class OASISDiscriminator(K.Model):
         for enc_blk in self.enc_blks:
             x = enc_blk(x)
             x_encs.append(x)
+        x = self.dec_blks[0](x)
         for n, dec_blk in enumerate(self.dec_blks):
             x_side = x_encs.pop()
+            if n == 0:
+                continue
             x = tf.concat([x, x_side], axis=-1) if n > 0 else x
             x = dec_blk(x)
             x_decs.append(x)
@@ -79,9 +83,9 @@ if __name__ == "__main__":
     for gpu in physical_devices:
         tf.config.experimental.set_memory_growth(gpu, True)
     gen = OASISGenerator()
-    disc = OASISDiscriminator()
-    i = tf.random.uniform((1, 256, 256, 3))
-    s = tf.random.uniform((1, 256, 256, 19))
+    disc = OASISDiscriminator(35)
+    i = tf.random.uniform((1, 256, 512, 3))
+    s = tf.random.uniform((1, 256, 512, 35))
     g_out = gen(s)
     d_out = disc(g_out)
     K.models.save_model(gen, "gen_here")

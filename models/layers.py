@@ -141,33 +141,40 @@ class ResBlock(K.layers.Layer):
 
 
 class SPADE(K.layers.Layer):
-    def __init__(self, channels, sn=False, activation=None, ks=5):
+    def __init__(self, channels, sn=False, activation=None, ks=5, is_oasis=False, init=tf.keras.initializers.glorot_normal()):
         super().__init__()
-        self.conv1 = K.layers.Conv2D(128, ks, 1, padding="SAME", activation="relu")
-        self.conv_gamma = K.layers.Conv2D(channels, ks, 1, padding="SAME")
-        self.conv_beta = K.layers.Conv2D(channels, ks, 1, padding="SAME")
+        self.conv1 = K.layers.Conv2D(128, ks, 1, padding="SAME", activation="relu", kernel_initializer=init)
+        self.conv_gamma = K.layers.Conv2D(channels, ks, 1, padding="SAME", kernel_initializer=init)
+        self.conv_beta = K.layers.Conv2D(channels, ks, 1, padding="SAME", kernel_initializer=init)
         if sn:
             self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
             self.conv_gamma = tfa.layers.SpectralNormalization(self.conv_gamma)
             self.conv_beta = tfa.layers.SpectralNormalization(self.conv_beta)
+        self.is_oasis = is_oasis
         self.activation = activation
+        # self.bn = K.layers.experimental.SyncBatchNormalization()
         # self.segmap_shape = tf.constant(segmap_shape[1:3], dtype=tf.int32)
         # self.avg_pool = lambda feature, strides: K.layers.AveragePooling2D(3, strides=strides, padding="SAME")(feature)
 
     def build(self, input_shape):
-        strides = tf.constant(input_shape[1][1:3]) // tf.constant(input_shape[0][1:3])
-        self.avg_pool = K.layers.AveragePooling2D(3, strides=strides.numpy(), padding="SAME")
+        if not self.is_oasis:
+            strides = tf.constant(input_shape[1][1:3]) // tf.constant(input_shape[0][1:3])
+            self.avg_pool = K.layers.AveragePooling2D(3, strides=strides.numpy(), padding="SAME")
 
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, training=None, **kwargs):
         feature, segmap = inputs
-        mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
-        x = (feature - mean) / tf.sqrt(var + 1e-5)
-        segmap_processed = self.avg_pool(segmap)
-        # new_shp = tf.shape(segmap)[1:3] // (tf.shape(segmap)[1:3] // tf.shape(x)[1:3])
-        # segmap_processed = tf.image.resize(segmap, new_shp)
-        segmap_processed = self.conv1(segmap_processed)
-        segmap_gamma = self.conv_gamma(segmap_processed)
-        segmap_beta = self.conv_beta(segmap_processed)
+        if not self.is_oasis:
+            mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
+            x = (feature - mean) / tf.sqrt(var + 1e-5)
+            segmap_processed = self.avg_pool(segmap)
+        else:
+            mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
+            x = (feature - mean) / tf.sqrt(var + 1e-5)
+            # x = self.bn(feature, training=training)
+            segmap_processed = tf.image.resize(segmap, size=tf.shape(x)[1:3], method="nearest")
+        segmap_processed = self.conv1(segmap_processed, training=training)
+        segmap_gamma = self.conv_gamma(segmap_processed, training=training)
+        segmap_beta = self.conv_beta(segmap_processed, training=training)
         x = x * (1 + segmap_gamma) + segmap_beta
         if self.activation is not None:
             x = self.activation(x)
@@ -175,78 +182,80 @@ class SPADE(K.layers.Layer):
 
 
 class SPADEResBlock(K.Model):
-    def __init__(self, channels, sn=False, ks=5):
+    def __init__(self, channels, sn=True, ks=5, is_oasis=False, init=tf.keras.initializers.glorot_uniform()):
         super().__init__()
         self.channels = channels
         self.sn = sn
         self.ks = ks
+        self.is_oasis = is_oasis
+        self.init = init
 
     def build(self, input_shape):
         channels_middle = tf.minimum(self.channels, input_shape[0][-1]).numpy()
-        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=False, ks=self.ks)
-        self.conv1 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME")
+        self.spade1 = SPADE(input_shape[0][-1], activation=tf.nn.leaky_relu, sn=self.is_oasis, ks=self.ks, is_oasis=self.is_oasis, init=self.init)
+        self.conv1 = K.layers.Conv2D(channels_middle, 3, 1, padding="SAME", kernel_initializer=self.init)
         if self.sn:
             self.conv1 = tfa.layers.SpectralNormalization(self.conv1)
-        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=False, ks=self.ks)
+        self.spade2 = SPADE(channels_middle, activation=tf.nn.leaky_relu, sn=self.is_oasis, ks=self.ks, is_oasis=self.is_oasis, init=self.init)
         if self.sn:
-            self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
+            self.conv2 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=self.init))
         else:
-            self.conv2 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME")
+            self.conv2 = K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=self.init)
         if self.channels != input_shape[0][-1]:
-            self.spade3 = SPADE(input_shape[0][-1], sn=False, ks=self.ks)
+            self.spade3 = SPADE(input_shape[0][-1], sn=self.is_oasis, ks=self.ks, is_oasis=self.is_oasis, init=self.init)
             if self.sn:
-                self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False))
+                self.conv3 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False, kernel_initializer=self.init))
             else:
-                self.conv3 = K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False)
+                self.conv3 = K.layers.Conv2D(self.channels, 1, 1, padding="SAME", use_bias=False, kernel_initializer=self.init)
 
     def call(self, inputs, training=None, mask=None):
         feature, segmap = inputs
-        x = self.spade1((feature, segmap))
+        x = self.spade1((feature, segmap), training=training)
         x = self.conv1(x)
-        x = self.spade2((x, segmap))
+        x = self.spade2((x, segmap), training=training)
         x = self.conv2(x)
         if self.channels != inputs[0].shape[-1]:
-            x_branch = self.spade3((feature, segmap))
+            x_branch = self.spade3((feature, segmap), training=training)
             x_branch = self.conv3(x_branch)
             return x_branch + x
         return x + feature
 
 
 class ResBlock_D(K.Model):
-    def __init__(self, channels, first=False, up_down="up"):
+    def __init__(self, channels, first=False, up_down="up", init=tf.keras.initializers.glorot_uniform()):
         super().__init__()
         self.channels = channels
         self.up_down = up_down
         self.first = first
         if self.first:
-            self.conv1 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))
+            self.conv1 = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=init))
         else:
             if up_down == "up":
                 self.conv1 = K.Sequential([K.layers.LeakyReLU(),
                                            K.layers.UpSampling2D(),
                                            tfa.layers.SpectralNormalization(
-                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=init))])
             else:
                 self.conv1 = K.Sequential([K.layers.LeakyReLU(),
                                            tfa.layers.SpectralNormalization(
-                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+                                               K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=init))])
         self.conv2 = K.Sequential([K.layers.LeakyReLU(),
                                    tfa.layers.SpectralNormalization(
-                                       K.layers.Conv2D(self.channels, 3, 1, padding="SAME"))])
+                                       K.layers.Conv2D(self.channels, 3, 1, padding="SAME", kernel_initializer=init))])
         self.resize = K.layers.UpSampling2D() if up_down == "up" else K.layers.AveragePooling2D()
 
-    def shortcut(self, x):
+    def shortcut(self, x, training=None):
         if self.first:
             if self.up_down == "down":
                 x = self.resize(x)
             if self.learned_shortcut:
-                x = self.conv_s(x)
+                x = self.conv_s(x, training=training)
             x_s = x
         else:
             if self.up_down == "up":
                 x = self.resize(x)
             if self.learned_shortcut:
-                x = self.conv_s(x)
+                x = self.conv_s(x, training=training)
             if self.up_down == "down":
                 x = self.resize(x)
             x_s = x
@@ -258,9 +267,9 @@ class ResBlock_D(K.Model):
             self.conv_s = tfa.layers.SpectralNormalization(K.layers.Conv2D(self.channels, 1, 1, padding="SAME"))
 
     def call(self, inputs, training=None, mask=None):
-        x = self.conv1(inputs)
-        x = self.conv2(x)
-        x_s = self.shortcut(inputs)
+        x = self.conv1(inputs, training=training)
+        x = self.conv2(x, training=training)
+        x_s = self.shortcut(inputs, training=training)
         if self.up_down == "down":
             x = self.resize(x)
         return x_s + x

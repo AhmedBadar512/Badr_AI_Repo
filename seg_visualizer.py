@@ -51,7 +51,7 @@ def get_images_custom(image, label, shp=(256, 512), cs_19=False):
     :return:
     """
     if shp is not None:
-        image = tf.image.resize(image, shp)
+        image = tf.image.resize(image, shp, method='bicubic')
         label = tf.image.resize(label, shp, method='nearest')
     if cs_19:
         label = tf.cast(label, dtype=tf.int32)
