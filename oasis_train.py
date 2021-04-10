@@ -173,11 +173,10 @@ def generate_labelmix(label, fake_image, real_image):
     switch = tf.cast(tf.random.uniform((args.classes + 1,), minval=0, maxval=1, dtype=tf.float32) > 0.5,
                      dtype=tf.float32)  # Generate floats 0 and 1 equal to the number of classes N
     switch_label = label * switch  # Multiply with the switch number to randomly turn classes off
-    target_map = tf.reduce_sum(switch_label[..., :args.classes + 1], axis=-1,
+    target_map = tf.reduce_sum(switch_label, axis=-1,
                                keepdims=True)  # Add the classes to get target for real images
     mixed_image = target_map * real_image + (1 - target_map) * fake_image  # Create a mixed image based on target_map
-    # mixed_label = tf.concat([switch_label[..., :args.classes], (1 - target_map)], axis=-1)
-    return mixed_image, target_map
+    return mixed_image, tf.clip_by_value(target_map, clip_value_min=0, clip_value_max=1.0)
 
 
 if LEARNING_RATE_SCHEDULER == "poly":
@@ -210,10 +209,7 @@ with mirrored_strategy.scope():
     generator(tmp1), discriminator(tmp)
     generator_optimizer = tfa.optimizers.MovingAverage(tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999),
                                                        average_decay=0.999)
-    discriminator_optimizer = tfa.optimizers.MovingAverage(tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999),
-                                                           average_decay=0.999)
-    # generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
-    # discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
+    discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
 
 
 def load_models(models_parent_dir):
@@ -246,7 +242,7 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
         tf.summary.scalar("D_Loss", tf.reduce_mean(disc_loss).numpy(), c_step)
         tf.summary.scalar("Labelmix_Loss", tf.reduce_mean(lm_loss).numpy(), c_step)
         if len(physical_devices) > 1:
-            o_img = tf.cast(tf.concat(mini_batch[0].values, axis=0), dtype=tf.float32) / 127.5 - 1.
+            o_img = (tf.cast(tf.concat(mini_batch[0].values, axis=0), dtype=tf.float32) / 127.5) - 1.
             # o_img = tf.cast(tf.concat(mini_batch[0].values, axis=0), dtype=tf.float32)
             o_seg = tf.cast(tf.concat(mini_batch[1].values, axis=0), dtype=tf.int32)
             # img, seg = o_img, tf.one_hot(o_seg[..., 0], args.classes + 1)
@@ -262,6 +258,12 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
         processed_labs = colorize_labels(processed_labs)
         f_image = generator(g_seg, training=True)
         p_lab = discriminator(img, training=True)
+        # pf_lab = discriminator(f_image, training=True)
+        # print("f_image", tf.reduce_min(f_image), tf.reduce_max(f_image))
+        # print("img", tf.reduce_min(img), tf.reduce_max(img))
+        # print("p_lab", tf.reduce_min(p_lab), tf.reduce_max(p_lab))
+        # print("pf_lab", tf.reduce_min(pf_lab), tf.reduce_max(pf_lab))
+        # print("\n ------------------ \n ---------------------- \n")
         m_im, _ = generate_labelmix(seg, f_image, img)
         processed_p_labs = colorize_labels(tf.argmax(p_lab, axis=-1))
         tf.summary.image("Img", (img + 1) / 2, step=c_step)
@@ -274,26 +276,20 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
 
 
 def train_step(mini_batch):
-    img = mini_batch[0] / 127.5 - 1.
+    img = (mini_batch[0] / 127.5) - 1.
     # img = tf.image.per_image_standardization(mini_batch[0])
-    g_label = tf.one_hot(mini_batch[1][..., 0], args.classes)
-    label = get_n1_target(mini_batch[1][..., 0])
-    fake_label = get_n1_target(mini_batch[1][..., 0], False)
-    with tf.GradientTape() as tape:
+    g_label = tf.one_hot(mini_batch[1][..., 0], args.classes) / 1.
+    label = get_n1_target(mini_batch[1][..., 0]) / 1.
+    fake_label = get_n1_target(mini_batch[1][..., 0], False) / 1.
+    with tf.GradientTape(persistent=True) as tape:
         fake_img = generator(g_label, training=True)
-        seg_fake = discriminator(fake_img, training=True)
-        # seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+        # seg_fake = discriminator(fake_img, training=True)
+        seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(seg_fake, label)
         total_gen_loss = g_adv_loss
-    # Calculate the gradients for generator
-    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
-    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
-    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
-                                        experimental_aggregate_gradients=False)
-    with tf.GradientTape() as tape:
-        fake_img = generator(g_label, training=True)
-        seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+        # fake_img = generator(g_label, training=True)
+        # seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # =========== Discriminator Cycle ============ #
         mixed_img, mask = generate_labelmix(label, fake_img, img)
         mixed_lbl = (seg_real * mask) + (seg_fake * (1 - mask))
@@ -303,6 +299,11 @@ def train_step(mini_batch):
         total_disc_loss = disc_loss_real + disc_loss_fake + lm_loss
 
     # ------------------- Disc Cycle -------------------- #
+    # Calculate the gradients for generator
+    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
+    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
+                                        experimental_aggregate_gradients=False)
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
     discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
@@ -398,7 +399,7 @@ for epoch in range(START_EPOCH, EPOCHS):
                 disc_loss_fake,
                 lm_loss,
                 psutil.virtual_memory().percent))
-        if n % 50 == 0:
-            write_to_tensorboard(g_adv_loss, disc_loss_real + disc_loss_fake, lm_loss, c_step, train_writer)
+        # if n % 50 == 0:
+        write_to_tensorboard(g_adv_loss, disc_loss_real + disc_loss_fake, lm_loss, c_step, train_writer)
     if (epoch + 1) % save_interval == 0:
         save_models()

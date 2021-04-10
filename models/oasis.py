@@ -11,16 +11,16 @@ from .layers import SPADEResBlock, ResBlock_D
 
 
 class OASISGenerator(K.Model):
-    def __init__(self, channels_list=None, sn=True):
+    def __init__(self, channels_list=None, sn=True, init=K.initializers.VarianceScaling(scale=1e-3, distribution='uniform')):
         super().__init__()
         if channels_list is None:
             channels_list = [1024, 1024, 512, 256, 128, 64]
         self.channels_list = channels_list
         self.sn = sn
         self.upsample = K.layers.UpSampling2D((2, 2))
-        self.conv = K.layers.Conv2D(channels_list[0], 3, 1, padding="SAME")
-        self.spade_resblocks = [SPADEResBlock(channels=chn, sn=self.sn, ks=3, is_oasis=True) for chn in channels_list]
-        self.final_conv = K.layers.Conv2D(3, 3, 1, padding="SAME")
+        self.conv = K.layers.Conv2D(channels_list[0], 3, 1, padding="SAME", kernel_initializer=init)
+        self.spade_resblocks = [SPADEResBlock(channels=chn, sn=self.sn, ks=3, is_oasis=True, init=init) for chn in channels_list]
+        self.final_conv = K.layers.Conv2D(3, 3, 1, padding="SAME", kernel_initializer=init)
 
     def build(self, input_shape):
         self.init_shp = tf.cast(input_shape[1:3], dtype=tf.int32) // 2 ** (len(self.channels_list) - 1)
@@ -41,20 +41,20 @@ class OASISGenerator(K.Model):
                 x = self.upsample(x)
         x = tf.nn.leaky_relu(x)
         x = self.final_conv(x)
-        x = tf.nn.tanh(x)
+        x = K.activations.tanh(x)
         return x
 
 
 class OASISDiscriminator(K.Model):
-    def __init__(self, classes=19, channels_list=None):
+    def __init__(self, classes=19, channels_list=None, init=K.initializers.VarianceScaling(scale=1e-3, distribution='uniform')):
         super().__init__()
         if channels_list is None:
             channels_list = [128, 128, 256, 256, 512, 512]
-        self.enc_blks = [ResBlock_D(channels, up_down="down", first=(n == 0)) for n, channels in
+        self.enc_blks = [ResBlock_D(channels, up_down="down", first=(n == 0), init=init) for n, channels in
                          enumerate(channels_list)]
         channels_list.reverse()
-        self.dec_blks = [ResBlock_D(channels, up_down="up") for n, channels in enumerate(channels_list[1:] + [64])]
-        self.conv_final = K.layers.Conv2D(classes + 1, 1, 1, padding="SAME")
+        self.dec_blks = [ResBlock_D(channels, up_down="up", init=init) for n, channels in enumerate(channels_list[1:] + [64])]
+        self.conv_final = K.layers.Conv2D(classes + 1, 1, 1, padding="SAME", kernel_initializer=init)
 
     def call(self, inputs, training=None, mask=None):
         x = inputs
