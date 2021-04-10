@@ -46,7 +46,7 @@ class OASISGenerator(K.Model):
 
 
 class OASISDiscriminator(K.Model):
-    def __init__(self, classes=19, channels_list=None, init=K.initializers.VarianceScaling(scale=1e-3, distribution='uniform')):
+    def __init__(self, classes=19, channels_list=None, init=K.initializers.VarianceScaling(scale=1e-4, distribution='uniform')):
         super().__init__()
         if channels_list is None:
             channels_list = [128, 128, 256, 256, 512, 512]

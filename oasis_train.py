@@ -390,16 +390,16 @@ for epoch in range(START_EPOCH, EPOCHS):
         c_step = (epoch * total_samples // BATCH_SIZE) + n
         g_adv_loss, disc_loss_real, disc_loss_fake, lm_loss = distributed_train_step(mini_batch)
         n += 1
-        # if n % 10 == 0:
-        print(
-            "\nEpoch {} \t Gen_Adv_Loss: {}, Disc_Loss_Real: {}, Disc_Loss_Fake: {}, LabelMix_Loss: {}, Memory_Usage:{}".format(
-                epoch + 1,
-                g_adv_loss,
-                disc_loss_real,
-                disc_loss_fake,
-                lm_loss,
-                psutil.virtual_memory().percent))
-        # if n % 50 == 0:
-        write_to_tensorboard(g_adv_loss, disc_loss_real + disc_loss_fake, lm_loss, c_step, train_writer)
+        if n % 10 == 0:
+            print(
+                "\nEpoch {} \t Gen_Adv_Loss: {}, Disc_Loss_Real: {}, Disc_Loss_Fake: {}, LabelMix_Loss: {}, Memory_Usage:{}".format(
+                    epoch + 1,
+                    g_adv_loss,
+                    disc_loss_real,
+                    disc_loss_fake,
+                    lm_loss,
+                    psutil.virtual_memory().percent))
+        if n % 50 == 0:
+            write_to_tensorboard(g_adv_loss, disc_loss_real + disc_loss_fake, lm_loss, c_step, train_writer)
     if (epoch + 1) % save_interval == 0:
         save_models()
