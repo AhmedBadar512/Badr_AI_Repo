@@ -152,7 +152,7 @@ class SPADE(K.layers.Layer):
             self.conv_beta = tfa.layers.SpectralNormalization(self.conv_beta)
         self.is_oasis = is_oasis
         self.activation = activation
-        self.bn = K.layers.experimental.SyncBatchNormalization()
+        self.bn = K.layers.experimental.SyncBatchNormalization(trainable=False)
         # self.segmap_shape = tf.constant(segmap_shape[1:3], dtype=tf.int32)
         # self.avg_pool = lambda feature, strides: K.layers.AveragePooling2D(3, strides=strides, padding="SAME")(feature)
 
@@ -168,9 +168,9 @@ class SPADE(K.layers.Layer):
             x = (feature - mean) / tf.sqrt(var + 1e-5)
             segmap_processed = self.avg_pool(segmap)
         else:
-            mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
-            x = (feature - mean) / tf.sqrt(var + 1e-5)
-            # x = self.bn(feature, training=training)
+            # mean, var = tf.nn.moments(feature, axes=[1, 2], keepdims=True)
+            # x = (feature - mean) / tf.sqrt(var + 1e-5)
+            x = self.bn(feature)
             segmap_processed = tf.image.resize(segmap, size=tf.shape(feature)[1:3], method="nearest")
         segmap_processed = self.conv1(segmap_processed, training=training)
         segmap_gamma = self.conv_gamma(segmap_processed, training=training)
