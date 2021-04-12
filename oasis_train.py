@@ -281,20 +281,13 @@ def train_step(mini_batch):
     g_label = tf.one_hot(mini_batch[1][..., 0], args.classes) / 1.
     label = get_n1_target(mini_batch[1][..., 0]) / 1.
     fake_label = get_n1_target(mini_batch[1][..., 0], False) / 1.
-    with tf.GradientTape() as tape:
+    with tf.GradientTape(persistent=True) as tape:
         fake_img = generator(g_label, training=True)
         # seg_fake = discriminator(fake_img, training=True)
         seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(seg_fake, label)
         total_gen_loss = g_adv_loss
-    # Calculate the gradients for generator
-    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
-    # generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
-    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
-    #                                     experimental_aggregate_gradients=False)
-    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
-    with tf.GradientTape() as tape:
         fake_img = generator(g_label, training=True)
         seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # =========== Discriminator Cycle ============ #
@@ -306,6 +299,12 @@ def train_step(mini_batch):
         total_disc_loss = disc_loss_real + disc_loss_fake + lm_loss
 
     # ------------------- Disc Cycle -------------------- #
+    # Calculate the gradients for generator
+    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
+    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
+                                        experimental_aggregate_gradients=False)
+    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
     discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
