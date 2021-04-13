@@ -314,7 +314,7 @@ def train_step(mini_batch):
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
     discriminator_gradients = tf.distribute.get_replica_context().all_reduce('sum', discriminator_gradients)
-    discriminator_gradients.apply_gradients(zip(discriminator_gradients, generator.trainable_variables),
+    discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables),
                                             experimental_aggregate_gradients=False)
     # discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
