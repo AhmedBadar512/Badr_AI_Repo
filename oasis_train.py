@@ -53,6 +53,7 @@ args.add_argument("--height", type=int, default=256, help="Size of the shuffle b
 args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
 args.add_argument("-mem_lim", "--memory_limit", type=int, default=90, help="Restart if RAM exceeds this % of total")
+args.add_argument("-sd", "--seed", type=int, default=42, help="Restart if RAM exceeds this % of total")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -84,7 +85,7 @@ gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
-tf.random.set_seed(192)
+tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
 if dataset == "cityscapes19":
