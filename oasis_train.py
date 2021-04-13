@@ -287,16 +287,22 @@ def train_step(mini_batch):
     g_label = tf.one_hot(mini_batch[1][..., 0], args.classes) / 1.
     label = get_n1_target(mini_batch[1][..., 0]) / 1.
     fake_label = get_n1_target(mini_batch[1][..., 0], False) / 1.
-    with tf.GradientTape(persistent=True) as tape:
+    with tf.GradientTape() as tape:
         fake_img = generator(g_label, training=True)
-        # seg_fake = discriminator(fake_img, training=True)
-        seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+        seg_fake = discriminator(fake_img, training=True)
+        # seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(seg_fake, label)
         total_gen_loss = g_adv_loss
-        # with tf.GradientTape() as tape:
-        #     fake_img = generator(g_label, training=True)
-        #     seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+    # Calculate the gradients for generator
+    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
+    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
+                                        experimental_aggregate_gradients=False)
+    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+    with tf.GradientTape() as tape:
+        fake_img = generator(g_label, training=True)
+        seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # =========== Discriminator Cycle ============ #
         mixed_img, mask = generate_labelmix(label, fake_img, img)
         mixed_lbl = (seg_real * mask) + (seg_fake * (1 - mask))
@@ -304,12 +310,6 @@ def train_step(mini_batch):
         lm_loss = LAMBDA_LM * tf.reduce_mean(labelmix_loss_obj(m_pred, mixed_lbl))
         disc_loss_real, disc_loss_fake = discriminator_loss(seg_real, seg_fake, label, fake_label)
         total_disc_loss = disc_loss_real + disc_loss_fake + lm_loss
-    # Calculate the gradients for generator
-    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
-    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
-    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
-                                        experimental_aggregate_gradients=False)
-    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
     # ------------------- Disc Cycle -------------------- #
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
