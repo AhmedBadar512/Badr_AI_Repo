@@ -256,8 +256,8 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
             seg = tf.one_hot(mini_batch[1][..., 0], args.classes + 1)
             processed_labs = mini_batch[1]
         processed_labs = colorize_labels(processed_labs)
-        f_image = generator(g_seg, training=False)
-        p_lab = discriminator(img, training=False)
+        f_image = generator(g_seg, training=True)
+        p_lab = discriminator(img, training=True)
         # pf_lab = discriminator(f_image, training=True)
         # print("f_image", tf.reduce_min(f_image), tf.reduce_max(f_image))
         # print("img", tf.reduce_min(img), tf.reduce_max(img))
@@ -283,11 +283,18 @@ def train_step(mini_batch):
     fake_label = get_n1_target(mini_batch[1][..., 0], False) / 1.
     with tf.GradientTape(persistent=True) as tape:
         fake_img = generator(g_label, training=True)
-        # seg_fake = discriminator(fake_img, training=True)
-        seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+        seg_fake = discriminator(fake_img, training=True)
+        # seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(seg_fake, label)
         total_gen_loss = g_adv_loss
+    # Calculate the gradients for generator
+    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
+    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
+                                        experimental_aggregate_gradients=False)
+    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+    with tf.GradientTape() as tape:
         fake_img = generator(g_label, training=True)
         seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # =========== Discriminator Cycle ============ #
@@ -299,12 +306,6 @@ def train_step(mini_batch):
         total_disc_loss = disc_loss_real + disc_loss_fake + lm_loss
 
     # ------------------- Disc Cycle -------------------- #
-    # Calculate the gradients for generator
-    generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
-    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
-    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
-                                        experimental_aggregate_gradients=False)
-    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
     discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
