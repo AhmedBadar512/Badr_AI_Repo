@@ -253,9 +253,12 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
             processed_labs = tf.argmax(seg, axis=-1)
         else:
             img = mini_batch[0] / 127.5 - 1
-            seg = tf.one_hot(mini_batch[1][..., 0], args.classes + 1)
+            g_seg = tf.one_hot(mini_batch[1][..., 0], args.classes) / 1.
+            seg = get_n1_target(mini_batch[1][..., 0])
             processed_labs = mini_batch[1]
         processed_labs = colorize_labels(processed_labs)
+        if args.batch_size == 1:
+            processed_labs = processed_labs[tf.newaxis]
         f_image = generator(g_seg, training=True)
         p_lab = discriminator(img, training=True)
         # pf_lab = discriminator(f_image, training=True)
@@ -266,6 +269,8 @@ def write_to_tensorboard(g_adv_loss, disc_loss, lm_loss, c_step, writer):
         # print("\n ------------------ \n ---------------------- \n")
         m_im, _ = generate_labelmix(seg, f_image, img)
         processed_p_labs = colorize_labels(tf.argmax(p_lab, axis=-1))
+        if args.batch_size == 1:
+            processed_p_labs = processed_p_labs[tf.newaxis]
         tf.summary.image("Img", (img + 1) / 2, step=c_step)
         tf.summary.image("Mixed_Img", (m_im + 1) / 2, step=c_step)
         tf.summary.image("translated_img", (f_image + 1) / 2, step=c_step)
@@ -288,9 +293,9 @@ def train_step(mini_batch):
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(seg_fake, label)
         total_gen_loss = g_adv_loss
-    # with tf.GradientTape() as tape:
-    #     fake_img = generator(g_label, training=True)
-    #     seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
+        # with tf.GradientTape() as tape:
+        #     fake_img = generator(g_label, training=True)
+        #     seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
         # =========== Discriminator Cycle ============ #
         mixed_img, mask = generate_labelmix(label, fake_img, img)
         mixed_lbl = (seg_real * mask) + (seg_fake * (1 - mask))
@@ -307,7 +312,10 @@ def train_step(mini_batch):
     # ------------------- Disc Cycle -------------------- #
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
-    discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
+    discriminator_gradients = tf.distribute.get_replica_context().all_reduce('sum', discriminator_gradients)
+    discriminator_gradients.apply_gradients(zip(discriminator_gradients, generator.trainable_variables),
+                                            experimental_aggregate_gradients=False)
+    # discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
     # ema.apply(generator.trainable_variables)
     return g_adv_loss, disc_loss_real, disc_loss_fake, lm_loss
