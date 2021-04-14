@@ -296,10 +296,10 @@ def train_step(mini_batch):
         total_gen_loss = g_adv_loss
     # Calculate the gradients for generator
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
-    generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
-    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
-                                        experimental_aggregate_gradients=False)
-    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+    # generator_gradients = tf.distribute.get_replica_context().all_reduce('sum', generator_gradients)
+    # generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables),
+    #                                     experimental_aggregate_gradients=False)
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
     with tf.GradientTape() as tape:
         fake_img = generator(g_label, training=True)
         seg_real, seg_fake = discriminator(img, training=True), discriminator(fake_img, training=True)
@@ -313,10 +313,10 @@ def train_step(mini_batch):
     # ------------------- Disc Cycle -------------------- #
     # Calculate the gradients for discriminator
     discriminator_gradients = tape.gradient(total_disc_loss, discriminator.trainable_variables)
-    discriminator_gradients = tf.distribute.get_replica_context().all_reduce('sum', discriminator_gradients)
-    discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables),
-                                            experimental_aggregate_gradients=False)
-    # discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
+    # discriminator_gradients = tf.distribute.get_replica_context().all_reduce('sum', discriminator_gradients)
+    # discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables),
+    #                                         experimental_aggregate_gradients=False)
+    discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
     # ema.apply(generator.trainable_variables)
     return g_adv_loss, disc_loss_real, disc_loss_fake, lm_loss
