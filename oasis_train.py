@@ -34,7 +34,8 @@ args.add_argument("-lrs", "--lr_scheduler", type=str, default="poly", help="Sele
 args.add_argument("-gm", "--gan_mode", type=str, default="normal", help="Select training mode for GAN",
                   choices=["normal", "wgan_gp", "ls_gan", "hinge", "normal"])
 args.add_argument("-e", "--epochs", type=int, default=200, help="Number of epochs to train")
-args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
+args.add_argument("--g_lr", type=float, default=4e-4, help="Initial learning rate")
+args.add_argument("--d_lr", type=float, default=4e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-bs", "--batch_size", type=int, default=2, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
@@ -75,7 +76,7 @@ CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
 LAMBDA_LM = 5.0
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
-G_LEARNING_RATE, D_LEARNING_RATE = 0.0004, 0.0004
+G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
 save_interval = args.save_interval
 save_dir = args.save_dir

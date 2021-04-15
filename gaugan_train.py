@@ -34,7 +34,8 @@ args.add_argument("-gm", "--gan_mode", type=str, default="hinge", help="Select t
 args.add_argument("-cm", "--cut_mode", type=str, default="cut", help="Select training mode for GAN",
                   choices=["cut", "fastcut"])
 args.add_argument("-e", "--epochs", type=int, default=1000, help="Number of epochs to train")
-args.add_argument("--lr", type=float, default=2e-4, help="Initial learning rate")
+args.add_argument("--g_lr", type=float, default=1e-4, help="Initial learning rate")
+args.add_argument("--d_lr", type=float, default=4e-4, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
@@ -53,6 +54,7 @@ args.add_argument("--height", type=int, default=286, help="Size of the shuffle b
 args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
 args.add_argument("-mem_lim", "--memory_limit", type=int, default=90, help="Restart if RAM exceeds this % of total")
+args.add_argument("-sd", "--seed", type=int, default=128, help="Seed value")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
 args.add_argument("--flip_left_right", action="store_true", default=False, help="Randomly flip images right left")
@@ -75,7 +77,7 @@ LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 1, 10, 10, 0.05
 nce_identity = True if args.cut_mode == "cut" else False
 EPOCHS = args.epochs
 LEARNING_RATE = args.lr
-G_LEARNING_RATE, D_LEARNING_RATE = 1e-4, 4e-4
+G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
 save_interval = args.save_interval
 save_dir = args.save_dir
@@ -85,7 +87,7 @@ gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
-tf.random.set_seed(128)
+tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
 if dataset == "cityscapes19":
