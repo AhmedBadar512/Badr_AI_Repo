@@ -75,7 +75,6 @@ CROP_HEIGHT = args.c_height if args.c_height < IMG_HEIGHT else IMG_HEIGHT
 CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
 LAMBDA_LM = 5.0
 EPOCHS = args.epochs
-LEARNING_RATE = args.lr
 G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
 save_interval = args.save_interval
@@ -85,7 +84,7 @@ MODEL = args.model
 gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
+logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
 tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 

@@ -22,8 +22,7 @@ mirrored_strategy = tf.distribute.MirroredStrategy()
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
 args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
-                  help="Name a dataset from the tf_dataset collection",
-                  choices=["cityscapes19"])
+                  help="Name a dataset from the tf_dataset collection")
 args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
@@ -39,6 +38,7 @@ args.add_argument("--d_lr", type=float, default=4e-4, help="Initial learning rat
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
+args.add_argument("-li", "--log_interval", type=int, default=5, help="Frequency to update logs")
 args.add_argument("-m", "--model", type=str, default="gaugan", help="Select model")
 args.add_argument("-logs", "--logdir", type=str, default="./logs_gaugan", help="Directory to save tensorboard logdir")
 args.add_argument("-l_m", "--load_model", type=str,
@@ -76,7 +76,6 @@ CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
 LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 1, 10, 10, 0.05
 nce_identity = True if args.cut_mode == "cut" else False
 EPOCHS = args.epochs
-LEARNING_RATE = args.lr
 G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
 save_interval = args.save_interval
@@ -86,7 +85,7 @@ MODEL = args.model
 gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = "{}_{}_e{}_lr{}_{}x{}_{}".format(time, MODEL, EPOCHS, LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
+logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
 tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
@@ -96,7 +95,7 @@ if dataset == "cityscapes19":
 else:
     cs_19 = False
 if not cs_19:
-    cmap = generate_random_colors(bg_class=args.bg_class)
+    cmap = generate_random_colors(bg_class=args.classes)
 
 dataset_train = TFRecordsSeg(
     tfrecord_path=
@@ -247,9 +246,10 @@ else:
 
 
 def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss, c_step, writer):
+    def colorize_labels(processed_labs):
+        return tf.cast(tf.squeeze(gpu_random_labels(processed_labs[..., tf.newaxis], cmap)), dtype=tf.uint8) \
+            if not cs_19 else tf.cast(tf.squeeze(gpu_cs_labels(processed_labs[..., tf.newaxis])), dtype=tf.uint8)
     with writer.as_default():
-        colorize = lambda img: tf.cast(tf.squeeze(gpu_cs_labels(img)), dtype=tf.uint8) if cs_19 else \
-            lambda img: tf.cast(tf.squeeze(gpu_random_labels(img, cmap)), dtype=tf.uint8)
         tf.summary.scalar("G_Adv_Loss", g_adv_loss.numpy(), c_step)
         tf.summary.scalar("G_kl_Loss", g_kl_loss.numpy(), c_step)
         tf.summary.scalar("G_VGG_Loss", g_vgg_loss.numpy(), c_step)
@@ -264,23 +264,15 @@ def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc
             img = mini_batch[0] / 127.5 - 1
             seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
             processed_labs = mini_batch[1]
-        # img_size_a, img_size_b = img_a.shape[1] * img_a.shape[2] * img_a.shape[3], img_b.shape[1] * img_b.shape[2] * \
-        #                          img_b.shape[3]
-        # mean_a = tf.reduce_mean(img_a, axis=[1, 2, 3], keepdims=True)
-        # adjusted_std_a = tf.maximum(tf.math.reduce_std(img_a, axis=[1, 2, 3], keepdims=True),
-        #                             1 / tf.sqrt(img_size_a / 1.0))
-        # f_image = generator((img_a - mean_a) / adjusted_std_a, training=True)
         enc_out = encoder(img)
         f_image = generator((enc_out, seg), training=True)
         tf.summary.image("Img", img + 1, step=c_step)
-        tf.summary.image("Seg", colorize(processed_labs[..., tf.newaxis]),
+        tf.summary.image("Seg", colorize_labels(processed_labs),
                          step=c_step)  # TODO: Add color segmentation here
         tf.summary.image("translated_img", f_image + 1, step=c_step)
 
 
 def train_step(mini_batch, random_style=False, n_critic=5):
-    # real_x = (real_x / 127.5) - 1
-    # real_y = (real_y / 127.5) - 1
     img = mini_batch[0] / 127.5 - 1
     seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
     with tf.GradientTape(persistent=True) as tape:
@@ -412,7 +404,7 @@ for epoch in range(START_EPOCH, EPOCHS):
                 epoch + 1, g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
                 psutil.virtual_memory().percent))
         n += 1
-        if n % 20 == 0:
+        if n % args.log_interval == 0:
             write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc_loss,
                                  c_step, train_writer)
     if (epoch + 1) % save_interval == 0:
