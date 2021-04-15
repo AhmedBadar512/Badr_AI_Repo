@@ -109,21 +109,21 @@ class TFRecordsSeg:
 
 
 if __name__ == "__main__":
-    classes = 150
-    dataset_name = "ade20k1"
-    train = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/training",
-                         label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/training",
-                         tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_train.tfrecords".format(dataset_name),
-                         classes=classes, img_pattern="*.jpg",
-                         label_pattern="*.png")
+    classes = 34
+    dataset_name = "oasis_test"
+    train = TFRecordsSeg(image_dir="/volumes2/datasets/oasis_test/leftImg8bit/train",
+                         label_dir="/volumes2/datasets/oasis_test/gtFine/train",
+                         tfrecord_path="/volumes2/datasets/oasis_test/{}_train.tfrecords".format(dataset_name),
+                         classes=classes, img_pattern="*.png",
+                         label_pattern="*labelIds.png")
     # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
-    val = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/validation",
-                       label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/validation",
-                       tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
-                       classes=classes, img_pattern="*.jpg",
-                       label_pattern="*.png")
+    # val = TFRecordsSeg(image_dir="/data/input/datasets/cityscape_processed/leftImg8bit/val",
+    #                    label_dir="/data/input/datasets/cityscape_processed/gtFine/val",
+    #                    tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
+    #                    classes=classes, img_pattern="*.png",
+    #                    label_pattern="*labelIds.png")
     train.write_tfrecords(training=True, dataset_name=dataset_name)
-    val.write_tfrecords()
+    # val.write_tfrecords()
     # example = train
     # image_dataset = example.read_tfrecords().repeat(10)
     # cv2.namedWindow("img", 0)

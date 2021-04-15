@@ -235,10 +235,11 @@ def train_step(real_x, real_y, n_critic=5):
 
         if gan_mode != "wgan_gp":
             disc_loss = discriminator_loss(disc_real_y, disc_fake_y)
-
     # ------------------- Disc Cycle -------------------- #
     if gan_mode == "wgan_gp":
         disc_loss = wgan_disc_apply(fake_y, real_y, n_critic)
+        # Not supported as Grads across antialias sampling is not supported, only supported with anti_alias set to false
+        # TODO: Add a custom definition for it antialias resizing to fix
     # Calculate the gradients for generator and discriminator
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
     generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))

@@ -4,6 +4,8 @@ from models.unet import *
 from models.faceswap_gan import *
 from models.cycle_gan import *
 from models.cut import *
+from models.gaugan import GAUGenerator, GAUDiscriminator, GAUEncoder
+from models.oasis import OASISGenerator, OASISDiscriminator
 
 __all__ = ['get_model']
 
@@ -23,7 +25,12 @@ _ganmodels = {
     'cut_gen': CUTGenerator,
     'cut_disc': CUTDiscriminator,
     'cut_enc': CUTEncoder,
-    'cut_mlp': PatchSampleMLP
+    'cut_mlp': PatchSampleMLP,
+    'gaugan_gen': GAUGenerator,
+    'gaugan_disc': GAUDiscriminator,
+    'gaugan_enc': GAUEncoder,
+    'oasis_gen': OASISGenerator,
+    'oasis_disc': OASISDiscriminator,
 }
 
 

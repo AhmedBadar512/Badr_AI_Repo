@@ -51,21 +51,21 @@ class CUTGenerator(Model):
         x1 = self.conv1(x)
         feats = [inputs, x1]
         if self.use_antialias:
-            x1 = tf.image.resize(x1, size=tf.shape(x1)[1:3] // 2, antialias=True)
+            x1 = tf.image.resize(x1, size=tf.shape(x1)[1:3] // 2, antialias=self.use_antialias)
         x2 = self.conv2(x1)
         feats.append(x2)
         if self.use_antialias:
-            x2 = tf.image.resize(x2, size=tf.shape(x2)[1:3] // 2, antialias=True)
+            x2 = tf.image.resize(x2, size=tf.shape(x2)[1:3] // 2, antialias=self.use_antialias)
         for n, res_block in enumerate(self.res_blocks):
             x2 = res_block(x2)
             if n in res_feats:
                 feats.append(x2)
         x3 = self.conv3(x2)
         if self.use_antialias:
-            x3 = tf.image.resize(x3, size=tf.shape(x3)[1:3] * 2, antialias=True)
+            x3 = tf.image.resize(x3, size=tf.shape(x3)[1:3] * 2, antialias=self.use_antialias)
         x4 = self.conv4(x3)
         if self.use_antialias:
-            x4 = tf.image.resize(x4, size=tf.shape(x4)[1:3] * 2, antialias=True)
+            x4 = tf.image.resize(x4, size=tf.shape(x4)[1:3] * 2, antialias=self.use_antialias)
         x5 = self.padf(x4)
         output = self.outputs(x5)
         if encoder_output:
@@ -95,13 +95,13 @@ class CUTDiscriminator(Model):
     def call(self, inputs, training=None, mask=None):
         x = self.conv1(inputs)
         if self.use_antialias:
-            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=True)
+            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=self.use_antialias)
         x = self.conv2(x)
         if self.use_antialias:
-            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=True)
+            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=self.use_antialias)
         x = self.conv3(x)
         if self.use_antialias:
-            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=True)
+            x = tf.image.resize(x, size=tf.shape(x)[1:3] // 2, antialias=self.use_antialias)
         x = self.pad1(x)
         x = self.conv4(x)
         x = self.pad2(x)
