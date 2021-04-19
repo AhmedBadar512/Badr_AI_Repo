@@ -11,7 +11,7 @@ from .layers import SPADEResBlock, ResBlock_D
 
 
 class OASISGenerator(K.Model):
-    def __init__(self, channels_list=None, sn=True, init=K.initializers.VarianceScaling(scale=5e-2)):
+    def __init__(self, channels_list=None, sn=True, init=K.initializers.glorot_uniform()):
         super().__init__()
         if channels_list is None:
             channels_list = [1024, 1024, 512, 256, 128, 64]
@@ -46,7 +46,7 @@ class OASISGenerator(K.Model):
 
 
 class OASISDiscriminator(K.Model):
-    def __init__(self, classes=19, channels_list=None, init=K.initializers.VarianceScaling(scale=1e-3)):
+    def __init__(self, classes=19, channels_list=None, init=K.initializers.glorot_uniform()):
         super().__init__()
         if channels_list is None:
             channels_list = [128, 128, 256, 256, 512, 512]
