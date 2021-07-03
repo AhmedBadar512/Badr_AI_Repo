@@ -111,38 +111,37 @@ class TFRecordsSeg:
 
 
 if __name__ == "__main__":
-    args = argparse.ArgumentParser(description="Create tfrecords with the following settings")
-    args.add_argument("-d", "--dataset", type=str, default=f"no_name_{str(np.random.randint(0, 20000))}",
-                      help="Name a dataset to be later used with seg_train script, highly recommended to have one")
-    args.add_argument("--img_dir", "-i", type=str, required=True, help="Directory containing the dataset images")
-    args.add_argument("--label_dir", "-l", type=str, required=True, help="Directory containing the dataset labels"
-                                                                         "Assumes names shared with respective images")
-    args.add_argument("--save_dir", "-s", type=str, required=True, help="Directory to save the tfrecords")
-    args.add_argument("--img_pat", "-i_p", type=str, default="*.jpg", help="Image pattern/extension in directory, "
-                                                                           "glob regex convention")
-    args.add_argument("--label_pat", "-l_p", type=str, default="*.png", help="Image pattern/extension in directory, "
-                                                                             "glob regex convention")
-    args.add_argument("--classes", "-c", type=int, required=True, help="Total number of classes in dataset")
-    args.add_argument("--visualize", "-v", action="store_true", help="Show 4 samples after creation. As visual check.")
-    args.add_argument("--eval", "-e", action="store_true", help="Set to true in case the records are for evaluation")
-    args = args.parse_args()
-    classes = args.classes
-    dataset_name = args.dataset
-    os.makedirs(args.save_dir, exist_ok=True)
-    record_type = "train" if not args.eval else "val"
-    records = TFRecordsSeg(image_dir=args.img_dir,
-                           label_dir=args.label_dir,
-                           tfrecord_path=f"{args.save_dir}/{dataset_name}_{record_type}.tfrecords",
-                           classes=classes, img_pattern=args.img_pat,
-                           label_pattern=args.label_pat)
-    records.write_tfrecords(training=True, dataset_name=dataset_name) if not args.eval else records.write_tfrecords()
-    if args.visualize:
-        image_dataset = records.read_tfrecords().take(4)
-        cv2.namedWindow("img", 0)
-        cv2.namedWindow("label", 0)
-        for image_features in image_dataset:
-            img = image_features[0][..., ::-1]
-            label = image_features[1]
-            cv2.imshow("img", img.numpy())
-            cv2.imshow("label", label.numpy()/classes)
-            cv2.waitKey()
+    classes = 150
+    dataset_name = "ade20k1"
+    train = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/training",
+                         label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/training",
+                         tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_train.tfrecords".format(dataset_name),
+                         classes=classes, img_pattern="*.jpg",
+                         label_pattern="*.png")
+    # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
+    val = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/validation",
+                       label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/validation",
+                       tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
+                       classes=classes, img_pattern="*.jpg",
+                       label_pattern="*.png")
+    train.write_tfrecords(training=True, dataset_name=dataset_name)
+    val.write_tfrecords()
+    # example = train
+    # image_dataset = example.read_tfrecords().repeat(10)
+    # cv2.namedWindow("img", 0)
+    # cv2.namedWindow("label", 0)
+    # for image_features in image_dataset:
+    #     img = image_features[0][..., ::-1]
+    #     label = image_features[1]
+    #     print(np.unique(label.numpy()))
+    #     insts = image_features[2]
+    #     cv2.imshow("img", img.numpy())
+    #     cv2.imshow("label", label.numpy()/classes)
+    #     cv2.waitKey()
+
+    #     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
+    # example.write_tfrecords()
+    # image_dataset = example.read_tfrecords().shuffle(10000)
+    #
+    # for image_features in image_dataset.take(10):
+    #     print(image_features[0].shape, image_features[1].numpy())
