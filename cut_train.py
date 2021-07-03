@@ -78,7 +78,7 @@ train_A, train_B = \
         tfrecord_path=
         "{}/{}_train.tfrecords".format(tf_record_path, dataset + "_b")).read_tfrecords()
 
-with open("/data/input/datasets/tf2_gan_tfrecords/data_samples.json") as f:
+with open(f"{args.tf_record_path}/data_samples.json") as f:
     data = json.load(f)
 num_samples_ab = [data[dataset + "_a"], data[dataset + "_b"]]
 if num_samples_ab[0] < num_samples_ab[1]:
