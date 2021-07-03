@@ -4,6 +4,8 @@ import os
 import cv2
 import numpy as np
 import tqdm
+import argparse
+
 
 class TFRecordsGAN:
     def __init__(self,
@@ -85,17 +87,27 @@ class TFRecordsGAN:
 
 
 if __name__ == "__main__":
-    dataset_name = "zebra2horse_b"
-    os.makedirs("/data/input-ai/datasets/tf2_gan_tfrecords", exist_ok=True)
-    train = TFRecordsGAN(image_dir="/volumes2/datasets/horse2zebra/trainB/",
-                         tfrecord_path="/data/input-ai/datasets/tf2_gan_tfrecords/{}_train.tfrecords".format(dataset_name), img_pattern="*.jpg")
-    val = TFRecordsGAN(image_dir="/volumes2/datasets/horse2zebra/testB/",
-                       tfrecord_path="/data/input-ai/datasets/tf2_gan_tfrecords/{}_val.tfrecords".format(dataset_name), img_pattern="*.jpg")
-    train.write_tfrecords(training=True, dataset_name=dataset_name)
-    val.write_tfrecords()
-    # image_dataset = train.read_tfrecords().repeat(10).batch(4)
-    # cv2.namedWindow("img", 0)
-    # for image_features in image_dataset:
-    #     img = image_features[0, ..., ::-1]
-    #     cv2.imshow("img", img.numpy())
-    #     cv2.waitKey()
+    args = argparse.ArgumentParser(description="Create tfrecords with the following settings")
+    args.add_argument("-d", "--dataset", type=str, default=f"no_name_{str(np.random.randint(0, 20000))}",
+                      help="Name a dataset to be later used with seg_train script, highly recommended to have one")
+    args.add_argument("--img_dir", "-i", type=str, required=True, help="Directory containing the dataset images")
+    args.add_argument("--save_dir", "-s", type=str, required=True, help="Directory to save the tfrecords")
+    args.add_argument("--img_pat", "-i_p", type=str, default="*.jpg", help="Image pattern/extension in directory, "
+                                                                           "glob regex convention")
+    args.add_argument("--visualize", "-v", action="store_true", help="Show 4 samples after creation. As visual check.")
+    args.add_argument("--eval", "-e", action="store_true", help="Set to true in case the records are for evaluation")
+    args = args.parse_args()
+    dataset_name = args.dataset
+    os.makedirs(args.save_dir, exist_ok=True)
+    record_type = "train" if not args.eval else "val"
+    records = TFRecordsGAN(image_dir=f"{args.img_dir}",
+                           tfrecord_path=f"{args.save_dir}/{dataset_name}_{record_type}.tfrecords",
+                           img_pattern=args.img_pat)
+    records.write_tfrecords(training=True, dataset_name=dataset_name) if not args.eval else records.write_tfrecords()
+    if args.visualize:
+        image_dataset = records.read_tfrecords().batch(1).take(4)
+        cv2.namedWindow("img", 0)
+        for image_features in image_dataset:
+            img = image_features[0, ..., ::-1]
+            cv2.imshow("img", img.numpy())
+            cv2.waitKey()
