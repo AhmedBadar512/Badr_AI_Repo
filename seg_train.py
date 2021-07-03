@@ -119,7 +119,7 @@ augmentor = lambda image, label: aug.augment_seg(image, label,
                                                  args.random_brightness,
                                                  args.random_contrast,
                                                  args.random_quality)
-with open("/data/input/datasets/tf2_segmentation_tfrecords/data_samples.json") as f:
+with open(f"{args.tf_record_path}/data_samples.json") as f:
     data = json.load(f)
 total_samples = data[dataset_name]
 # =========== Process dataset ============ #
