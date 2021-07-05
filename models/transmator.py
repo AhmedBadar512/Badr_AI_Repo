@@ -9,7 +9,7 @@ import tensorflow_addons as tfa
 
 import tensorflow.keras as K
 from tensorflow.keras.layers import Dense
-from layers import ConvBlock, Padding2D, SPADEResBlock
+from .layers import ConvBlock, Padding2D, SPADEResBlock
 import tensorflow_probability as tfp
 
 
@@ -58,9 +58,9 @@ class TransmatorGenerator(K.Model):
                  fixed_size=False,
                  in_channels=3,
                  in_size=(512, 512),
-                 classes=21,
+                 classes=3,
                  aux=False,
-                 activation='relu',
+                 activation=tf.nn.leaky_relu,
                  **kwargs):
         super().__init__(**kwargs)
         assert (in_channels > 0)
@@ -78,22 +78,50 @@ class TransmatorGenerator(K.Model):
                                       3,
                                       activation=activation,
                                       padding='same',
-                                      kernel_initializer='he_normal') for _ in range(3)]
+                                      kernel_initializer='he_normal')
+                      if n < 1 else
+                      tfa.layers.SpectralNormalization(K.layers.Conv2D(base_channels,
+                                                                       3,
+                                                                       activation=activation,
+                                                                       padding='same',
+                                                                       kernel_initializer='he_normal'))
+                      for n in range(3)]
         self.conv2 = [K.layers.Conv2D(base_channels * 2,
                                       3,
                                       activation=activation,
                                       padding='same',
-                                      kernel_initializer='he_normal') for _ in range(4)]
+                                      kernel_initializer='he_normal')
+                      if n < 2 else
+                      tfa.layers.SpectralNormalization(K.layers.Conv2D(base_channels * 2,
+                                                                       3,
+                                                                       activation=activation,
+                                                                       padding='same',
+                                                                       kernel_initializer='he_normal'))
+                      for n in range(4)]
         self.conv3 = [K.layers.Conv2D(base_channels * 4,
                                       3,
                                       activation=activation,
                                       padding='same',
-                                      kernel_initializer='he_normal') for _ in range(4)]
+                                      kernel_initializer='he_normal')
+                      if n < 2 else
+                      tfa.layers.SpectralNormalization(K.layers.Conv2D(base_channels * 4,
+                                                                       3,
+                                                                       activation=activation,
+                                                                       padding='same',
+                                                                       kernel_initializer='he_normal'))
+                      for n in range(4)]
         self.conv4 = [K.layers.Conv2D(base_channels * 8,
                                       3,
                                       activation=activation,
                                       padding='same',
-                                      kernel_initializer='he_normal') for _ in range(4)]
+                                      kernel_initializer='he_normal')
+                      if n < 2 else
+                      tfa.layers.SpectralNormalization(K.layers.Conv2D(base_channels * 8,
+                                                                       3,
+                                                                       activation=activation,
+                                                                       padding='same',
+                                                                       kernel_initializer='he_normal'))
+                      for n in range(4)]
         self.conv5 = [K.layers.Conv2D(base_channels * 16,
                                       3,
                                       activation=activation,
@@ -104,7 +132,7 @@ class TransmatorGenerator(K.Model):
         self.dropout3 = K.layers.Dropout(0.3)
         self.pool = K.layers.MaxPool2D(pool_size=(2, 2))
         self.bn = []
-        for _ in range(18):
+        for _ in range(10):
             self.bn.append(K.layers.BatchNormalization())
         self.up6 = K.layers.Conv2DTranspose(base_channels * 8, (3, 3), strides=(2, 2), padding="same")
         self.up7 = K.layers.Conv2DTranspose(base_channels * 4, (3, 3), strides=(2, 2), padding="same")
@@ -148,36 +176,36 @@ class TransmatorGenerator(K.Model):
         c5 = self.bn[9](c5, training=training)
 
         u6 = self.up6(c5)
-        u6 = K.layers.concatenate([u6, c4])
+        # u6 = K.layers.concatenate([u6, c4])
         c6 = self.conv4[2](u6)
-        c6 = self.bn[10](c6, training=training)
+        # c6 = self.bn[10](c6, training=training)
         c6 = self.dropout2(c6)
         c6 = self.conv4[3](c6)
-        c6 = self.bn[11](c6, training=training)
+        # c6 = self.bn[11](c6, training=training)
 
         u7 = self.up7(c6)
-        u7 = K.layers.concatenate([u7, c3])
+        # u7 = K.layers.concatenate([u7, c3])
         c7 = self.conv3[2](u7)
-        c7 = self.bn[12](c7, training=training)
+        # c7 = self.bn[12](c7, training=training)
         c7 = self.dropout2(c7)
         c7 = self.conv3[3](c7)
-        c7 = self.bn[13](c7, training=training)
+        # c7 = self.bn[13](c7, training=training)
 
         u8 = self.up8(c7)
-        u8 = K.layers.concatenate([u8, c2])
+        # u8 = K.layers.concatenate([u8, c2])
         c8 = self.conv2[2](u8)
-        c8 = self.bn[14](c8, training=training)
+        # c8 = self.bn[14](c8, training=training)
         c8 = self.dropout1(c8)
         c8 = self.conv2[3](c8)
-        c8 = self.bn[15](c8, training=training)
+        # c8 = self.bn[15](c8, training=training)
 
         u9 = self.up9(c8)
-        u9 = K.layers.concatenate([u9, c1])
+        # u9 = K.layers.concatenate([u9, c1])
         c9 = self.conv1[1](u9)
-        c9 = self.bn[16](c9, training=training)
+        # c9 = self.bn[16](c9, training=training)
         c9 = self.dropout1(c9)
         c9 = self.conv1[2](c9)
-        c9 = self.bn[17](c9, training=training)
+        # c9 = self.bn[17](c9, training=training)
 
         final = self.conv10(c9)
         return final

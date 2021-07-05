@@ -31,13 +31,13 @@ args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help=
 args.add_argument("-gm", "--gan_mode", type=str, default="hinge", help="Select training mode for GAN",
                   choices=["normal", "wgan_gp", "ls_gan", "hinge"])
 args.add_argument("-e", "--epochs", type=int, default=1000, help="Number of epochs to train")
-args.add_argument("--g_lr", type=float, default=1e-4, help="Initial learning rate")
-args.add_argument("--d_lr", type=float, default=4e-4, help="Initial learning rate")
+args.add_argument("--g_lr", type=float, default=1e-5, help="Initial learning rate")
+args.add_argument("--d_lr", type=float, default=4e-5, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
 args.add_argument("-li", "--log_interval", type=int, default=5, help="Frequency to update logs")
-args.add_argument("-m", "--model", type=str, default="gaugan", help="Select model")
+args.add_argument("-m", "--model", type=str, default="transmator", help="Select model")
 args.add_argument("-logs", "--logdir", type=str, default="./logs_transmator", help="Directory to save tensorboard logdir")
 args.add_argument("-l_m", "--load_model", type=str,
                   default=None,
@@ -211,7 +211,7 @@ with mirrored_strategy.scope():
     discriminator = get_model("{}_disc".format(MODEL), type="gan")  # TODO: PatchGAN Discriminator
     # encoder = get_model("{}_enc".format(MODEL), type="gan")
     # enc_out = encoder(tmp)
-    generator([tmp]), discriminator([tmp])
+    generator(tmp), discriminator(tmp)
     generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
     # TODO: Add options for optimizers in args
     discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
@@ -258,7 +258,7 @@ def write_to_tensorboard(g_adv_loss, disc_loss, c_step, writer):
             img = mini_batch[0] / 127.5 - 1
             # seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
             processed_labs = mini_batch[1]
-        f_image = generator([img], training=True)
+        f_image = generator(img, training=True)
         tf.summary.image("Img", img + 1, step=c_step)
         tf.summary.image("Seg", colorize_labels(processed_labs),
                          step=c_step)  # TODO: Add color segmentation here
@@ -273,8 +273,8 @@ def train_step(mini_batch, n_critic=5):
         #     enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
         # else:
         #     enc_vector, enc_vector_mean, enc_vector_logvar = encoder(img, training=True)
-        fake_img = generator([img])
-        disc_real, disc_fake = discriminator([img]), discriminator([fake_img])
+        fake_img = generator(img)
+        disc_real, disc_fake = discriminator(img), discriminator(fake_img)
 
         # ============ Generator Cycle =============== #
         g_adv_loss = generator_loss(disc_fake)
