@@ -71,7 +71,7 @@ IMG_WIDTH = args.width
 IMG_HEIGHT = args.height
 CROP_HEIGHT = args.c_height if args.c_height < IMG_HEIGHT else IMG_HEIGHT
 CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
-LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 1, 10, 10, 0.05
+LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 2, 10, 10, 0.05
 EPOCHS = args.epochs
 G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
@@ -139,6 +139,8 @@ else:
     gan_loss_obj = get_loss(name="binary_crossentropy")
 kl_loss = lambda mean, logvar: 0.5 * tf.reduce_sum(tf.square(mean) + tf.exp(logvar) - 1 - logvar)
 feature_loss = get_loss(name="FeatureLoss")
+ae_loss = get_loss(name="MSE")
+rmi_loss = get_loss(name="RMI")
 
 
 # TODO: Add Regularization loss
@@ -158,7 +160,7 @@ def discriminator_loss(real_list, generated_list):
             real_loss = gan_loss_obj(tf.ones_like(real), real)
             generated_loss = gan_loss_obj(tf.zeros_like(generated), generated)
         total_disc_loss += tf.reduce_mean(generated_loss) + tf.reduce_mean(real_loss)
-    return tf.reduce_mean(total_disc_loss) * 0.5 * LAMBDA_ADV
+    return tf.reduce_mean(total_disc_loss) * LAMBDA_ADV
 
 
 def generator_loss(generated_list):
@@ -280,10 +282,11 @@ def train_step(mini_batch, n_critic=5):
         g_adv_loss = generator_loss(disc_fake)
         # g_kl_loss = calc_kl_loss(enc_vector_mean, enc_vector_logvar)
         # g_vgg_loss = calc_vgg_loss(img, fake_img)
-        # g_feautre_loss = feature_loss(disc_real, disc_fake)  # TODO: Check with inclusion later very promising
+        g_feautre_loss = feature_loss(disc_real, disc_fake)  # TODO: Check with inclusion later very promising
+
 
         # total_gen_loss = g_adv_loss + g_kl_loss + g_vgg_loss + g_feautre_loss
-        total_gen_loss = g_adv_loss
+        total_gen_loss = g_adv_loss + g_feautre_loss + tf.reduce_mean(ae_loss(img, fake_img)) + tf.reduce_mean(rmi_loss(img, fake_img))
 
         # =========== Discriminator Cycle ============ #
 
@@ -292,7 +295,7 @@ def train_step(mini_batch, n_critic=5):
 
     # ------------------- Disc Cycle -------------------- #
     if gan_mode == "wgan_gp":
-        disc_loss = wgan_disc_apply(fake_img, img, seg, n_critic)
+        disc_loss = wgan_disc_apply(fake_img, img, n_critic)
     # Calculate the gradients for generator and discriminator
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
     generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
@@ -308,13 +311,13 @@ def train_step(mini_batch, n_critic=5):
     return total_gen_loss, disc_loss
 
 
-def wgan_disc_apply(fake, real, seg, n_critic):
+def wgan_disc_apply(fake, real, n_critic):
     for _ in range(n_critic):
         with tf.GradientTape(persistent=True) as disc_tape:
-            disc_real = discriminator((real, seg), training=True)
-            disc_fake = discriminator((fake, seg), training=True)
+            disc_real = discriminator(real, training=True)
+            disc_fake = discriminator(fake, training=True)
             disc_loss = discriminator_loss(disc_real, disc_fake) + 10 * gradient_penalty(real, fake,
-                                                                                         discriminator, seg)
+                                                                                         discriminator)
 
         discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
