@@ -138,7 +138,7 @@ class TransmatorGenerator(K.Model):
         self.up7 = K.layers.Conv2DTranspose(base_channels * 4, (3, 3), strides=(2, 2), padding="same")
         self.up8 = K.layers.Conv2DTranspose(base_channels * 2, (3, 3), strides=(2, 2), padding="same")
         self.up9 = K.layers.Conv2DTranspose(base_channels, (3, 3), strides=(2, 2), padding="same")
-        self.conv10 = K.layers.Conv2D(classes, 1, strides=1, padding="same")
+        self.conv10 = K.layers.Conv2D(classes, 1, strides=1, padding="same", activation=tf.nn.tanh)
 
     def call(self, inputs, training=None, mask=None):
         c1 = self.in_conv(inputs)
