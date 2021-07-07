@@ -71,7 +71,7 @@ IMG_WIDTH = args.width
 IMG_HEIGHT = args.height
 CROP_HEIGHT = args.c_height if args.c_height < IMG_HEIGHT else IMG_HEIGHT
 CROP_WIDTH = args.c_width if args.c_width < IMG_WIDTH else IMG_WIDTH
-LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 2, 10, 10, 0.05
+LAMBDA_ADV, LAMBDA_VGG, LAMBDA_FEATURE, LAMBDA_KL = 1, 10, 10, 0.05
 EPOCHS = args.epochs
 G_LEARNING_RATE, D_LEARNING_RATE = args.g_lr, args.d_lr
 LEARNING_RATE_SCHEDULER = args.lr_scheduler
@@ -139,8 +139,6 @@ else:
     gan_loss_obj = get_loss(name="binary_crossentropy")
 kl_loss = lambda mean, logvar: 0.5 * tf.reduce_sum(tf.square(mean) + tf.exp(logvar) - 1 - logvar)
 feature_loss = get_loss(name="FeatureLoss")
-ae_loss = get_loss(name="MSE")
-rmi_loss = get_loss(name="RMI")
 
 
 # TODO: Add Regularization loss
@@ -286,7 +284,7 @@ def train_step(mini_batch, n_critic=5):
 
 
         # total_gen_loss = g_adv_loss + g_kl_loss + g_vgg_loss + g_feautre_loss
-        total_gen_loss = g_adv_loss + g_feautre_loss + tf.reduce_mean(ae_loss(img, fake_img)) + tf.reduce_mean(rmi_loss(img, fake_img))
+        total_gen_loss = g_adv_loss + g_feautre_loss
 
         # =========== Discriminator Cycle ============ #
 
