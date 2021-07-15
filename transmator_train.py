@@ -84,7 +84,7 @@ MODEL = args.model
 gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode, args.run_name)
+logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode, "_" + args.run_name)
 tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
