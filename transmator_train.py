@@ -211,15 +211,20 @@ with mirrored_strategy.scope():
                   dtype=tf.float32)
     tmp1 = tf.cast(tf.random.uniform((1, CROP_HEIGHT, CROP_WIDTH, args.classes), dtype=tf.float32, minval=0, maxval=1),
                    dtype=tf.float32)
-    generator = get_model("{}_gen".format(MODEL), type="gan")   # TODO: Test with a Unet generator
+    generator = get_model("{}_gen".format(MODEL), type="gan")
     discriminator = get_model("{}_disc".format(MODEL), type="gan")  # TODO: PatchGAN Discriminator
     # encoder = get_model("{}_enc".format(MODEL), type="gan")
     # enc_out = encoder(tmp)
     generator([tmp, tmp1]), discriminator(tmp)
-    generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
-    # TODO: Add options for optimizers in args
-    discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
-
+    if args.optimizer.upper() == "SGD":
+        generator_optimizer = tf.keras.optimizers.SGD(g_lrs)
+        discriminator_optimizer = tf.keras.optimizers.SGD(d_lrs)
+    elif args.optimizer.upper() == "RMSPROP":
+        generator_optimizer = tf.keras.optimizers.RMSprop(g_lrs)
+        discriminator_optimizer = tf.keras.optimizers.RMSprop(d_lrs)
+    else:
+        generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
+        discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
 
 # def calc_vgg_loss(real, fake):
 #     loss = vgg_loss(real, fake)
