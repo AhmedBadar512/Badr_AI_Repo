@@ -141,7 +141,8 @@ class TransmatorGenerator(K.Model):
         self.conv10 = K.layers.Conv2D(classes, 1, strides=1, padding="same", activation=tf.nn.tanh)
 
     def call(self, inputs, training=None, mask=None):
-        c1 = self.in_conv(inputs)
+        img, seg = inputs
+        c1 = self.in_conv(img)
         c1 = self.bn[0](c1, training=training)
         c1 = self.dropout1(c1)
         c1 = self.conv1[0](c1)
@@ -177,6 +178,7 @@ class TransmatorGenerator(K.Model):
 
         u6 = self.up6(c5)
         # u6 = K.layers.concatenate([u6, c4])
+        u6 = K.layers.concatenate([u6, tf.image.resize(seg, size=tf.shape(u6)[1:3], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)])
         c6 = self.conv4[2](u6)
         # c6 = self.bn[10](c6, training=training)
         c6 = self.dropout2(c6)
@@ -185,6 +187,7 @@ class TransmatorGenerator(K.Model):
 
         u7 = self.up7(c6)
         # u7 = K.layers.concatenate([u7, c3])
+        u7 = K.layers.concatenate([u7, tf.image.resize(seg, size=tf.shape(u7)[1:3], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)])
         c7 = self.conv3[2](u7)
         # c7 = self.bn[12](c7, training=training)
         c7 = self.dropout2(c7)
@@ -193,6 +196,7 @@ class TransmatorGenerator(K.Model):
 
         u8 = self.up8(c7)
         # u8 = K.layers.concatenate([u8, c2])
+        u8 = K.layers.concatenate([u8, tf.image.resize(seg, size=tf.shape(u8)[1:3], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)])
         c8 = self.conv2[2](u8)
         # c8 = self.bn[14](c8, training=training)
         c8 = self.dropout1(c8)
@@ -201,6 +205,7 @@ class TransmatorGenerator(K.Model):
 
         u9 = self.up9(c8)
         # u9 = K.layers.concatenate([u9, c1])
+        u9 = K.layers.concatenate([u9, tf.image.resize(seg, size=tf.shape(u9)[1:3], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)])
         c9 = self.conv1[1](u9)
         # c9 = self.bn[16](c9, training=training)
         c9 = self.dropout1(c9)

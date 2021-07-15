@@ -21,9 +21,9 @@ for gpu in physical_devices:
 mirrored_strategy = tf.distribute.MirroredStrategy()
 
 args = argparse.ArgumentParser(description="Train a network with specific settings")
-args.add_argument("-d", "--dataset", type=str, default="cityscapes19",
+args.add_argument("-d", "--dataset", type=str, default="cityscapes",
                   help="Name a dataset from the tf_dataset collection")
-args.add_argument("-c", "--classes", type=int, default=19, help="Number of classes")
+args.add_argument("-c", "--classes", type=int, default=34, help="Number of classes")
 args.add_argument("-opt", "--optimizer", type=str, default="Adam", help="Select optimizer",
                   choices=["SGD", "RMSProp", "Adam"])
 args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help="Select learning rate scheduler",
@@ -46,12 +46,14 @@ args.add_argument("-s", "--save_dir", type=str, default="./transmator_runs",
                   help="Save directory for models and tensorboard")
 args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_segmentation_tfrecords",
                   help="Save directory that contains train and validation tfrecords")
+args.add_argument("-rn", "--run_name", type=str, default="",
+                  help="Custom name for logs")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=584, help="Size of the shuffle buffer")
 args.add_argument("--height", type=int, default=286, help="Size of the shuffle buffer")
 args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
-args.add_argument("-mem_lim", "--memory_limit", type=int, default=90, help="Restart if RAM exceeds this % of total")
+args.add_argument("-mem_lim", "--memory_limit", type=int, default=80, help="Restart if RAM exceeds this % of total")
 args.add_argument("-sd", "--seed", type=int, default=128, help="Seed value")
 # ============ Augmentation Arguments ===================== #
 args.add_argument("--flip_up_down", action="store_true", default=False, help="Randomly flip images up and down")
@@ -82,7 +84,7 @@ MODEL = args.model
 gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
-logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
+logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode, args.run_name)
 tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
@@ -211,7 +213,7 @@ with mirrored_strategy.scope():
     discriminator = get_model("{}_disc".format(MODEL), type="gan")  # TODO: PatchGAN Discriminator
     # encoder = get_model("{}_enc".format(MODEL), type="gan")
     # enc_out = encoder(tmp)
-    generator(tmp), discriminator(tmp)
+    generator([tmp, tmp1]), discriminator(tmp)
     generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
     # TODO: Add options for optimizers in args
     discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
@@ -237,7 +239,7 @@ def load_models(models_parent_dir):
 
 if load_model_path is not None:
     load_models(load_model_path)
-    START_EPOCH = int(load_model_path.split("/")[-1]) - 1
+    START_EPOCH = int(load_model_path.split("/")[-1]) - 2
 else:
     START_EPOCH = 0
 
@@ -256,9 +258,9 @@ def write_to_tensorboard(g_adv_loss, disc_loss, c_step, writer):
             processed_labs = tf.concat(mini_batch[1].values, axis=0)
         else:
             img = mini_batch[0] / 127.5 - 1
-            # seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
+            seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
             processed_labs = mini_batch[1]
-        f_image = generator(img, training=True)
+        f_image = generator([img, seg], training=True)
         tf.summary.image("Img", img + 1, step=c_step)
         tf.summary.image("Seg", colorize_labels(processed_labs),
                          step=c_step)  # TODO: Add color segmentation here
@@ -273,7 +275,7 @@ def train_step(mini_batch, n_critic=5):
         #     enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
         # else:
         #     enc_vector, enc_vector_mean, enc_vector_logvar = encoder(img, training=True)
-        fake_img = generator(img)
+        fake_img = generator([img, seg])
         disc_real, disc_fake = discriminator(img), discriminator(fake_img)
 
         # ============ Generator Cycle =============== #
