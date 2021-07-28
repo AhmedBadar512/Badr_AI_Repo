@@ -53,6 +53,7 @@ args.add_argument("--width", type=int, default=584, help="Size of the shuffle bu
 args.add_argument("--height", type=int, default=286, help="Size of the shuffle buffer")
 args.add_argument("--c_width", type=int, default=512, help="Crop width")
 args.add_argument("--c_height", type=int, default=256, help="Crop height")
+args.add_argument("-rs", "--random_style", action="store_true", default=False, help="If true remove encoder and feed random values")
 args.add_argument("-mem_lim", "--memory_limit", type=int, default=90, help="Restart if RAM exceeds this % of total")
 args.add_argument("-sd", "--seed", type=int, default=128, help="Seed value")
 # ============ Augmentation Arguments ===================== #
@@ -85,7 +86,9 @@ MODEL = args.model
 gan_mode = args.gan_mode
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
+random_style = args.random_style
 logdir = "{}_{}_e{}_glr{}_dlr{}_{}x{}_{}".format(time, MODEL, EPOCHS, G_LEARNING_RATE, D_LEARNING_RATE, IMG_HEIGHT, IMG_WIDTH, gan_mode)
+logdir += "_rs"
 tf.random.set_seed(args.seed)
 # =========== Load Dataset ============ #
 
@@ -212,8 +215,11 @@ with mirrored_strategy.scope():
                    dtype=tf.float32)
     generator = get_model("{}_gen".format(MODEL), type="gan")
     discriminator = get_model("{}_disc".format(MODEL), type="gan")
-    encoder = get_model("{}_enc".format(MODEL), type="gan")
-    enc_out = encoder(tmp)
+    if not random_style:
+        encoder = get_model("{}_enc".format(MODEL), type="gan")
+        enc_out = encoder(tmp)
+    else:
+        enc_out = tf.random.uniform((1, 64))
     generator([enc_out, tmp1]), discriminator([tmp, tmp1])
     generator_optimizer = tf.keras.optimizers.Adam(g_lrs, beta_1=0.0, beta_2=0.999)
     discriminator_optimizer = tf.keras.optimizers.Adam(d_lrs, beta_1=0.0, beta_2=0.999)
@@ -229,13 +235,15 @@ def load_models(models_parent_dir):
     assert os.path.exists(models_parent_dir), "The path {} is not valid".format(models_parent_dir)
     p_gen = K.models.load_model(os.path.join(models_parent_dir, "gen"))
     p_disc = K.models.load_model(os.path.join(models_parent_dir, "disc"))
-    p_enc = K.models.load_model(os.path.join(models_parent_dir, "encoder"))
+    if not random_style:
+        p_enc = K.models.load_model(os.path.join(models_parent_dir, "encoder"))
     generator.set_weights(p_gen.get_weights())
     print("Generator loaded successfully")
     discriminator.set_weights(p_disc.get_weights())
     print("Discriminator loaded successfully")
-    encoder.set_weights(p_enc.get_weights())
-    print("Encoder loaded successfully")
+    if not random_style:
+        encoder.set_weights(p_enc.get_weights())
+        print("Encoder loaded successfully")
 
 
 if load_model_path is not None:
@@ -264,7 +272,10 @@ def write_to_tensorboard(g_adv_loss, g_kl_loss, g_vgg_loss, g_feautre_loss, disc
             img = mini_batch[0] / 127.5 - 1
             seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
             processed_labs = mini_batch[1]
-        enc_out = encoder(img)
+        if not random_style:
+            enc_out = encoder(img)
+        else:
+            enc_out = tf.random.normal((img.shape[0], 64))
         f_image = generator((enc_out, seg), training=True)
         tf.summary.image("Img", img + 1, step=c_step)
         tf.summary.image("Seg", colorize_labels(processed_labs),
@@ -277,7 +288,7 @@ def train_step(mini_batch, random_style=False, n_critic=5):
     seg = tf.one_hot(mini_batch[1][..., 0], args.classes)
     with tf.GradientTape(persistent=True) as tape:
         if random_style:
-            enc_vector = tf.random.normal(shape=(args.batch_size, enc_out.shape[-1]))
+            enc_vector, enc_vector_mean, enc_vector_logvar = tf.random.normal(shape=(mini_batch[0].shape[0], 64)), tf.zeros(shape=(mini_batch[0].shape[0], 64)), tf.ones(shape=(mini_batch[0].shape[0], 64))
         else:
             enc_vector, enc_vector_mean, enc_vector_logvar = encoder(img, training=True)
         fake_img = generator([enc_vector, seg])
@@ -303,8 +314,9 @@ def train_step(mini_batch, random_style=False, n_critic=5):
     generator_gradients = tape.gradient(total_gen_loss, generator.trainable_variables)
     generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
 
-    encoder_gradients = tape.gradient(total_gen_loss, encoder.trainable_variables)
-    generator_optimizer.apply_gradients(zip(encoder_gradients, encoder.trainable_variables))
+    if not random_style:
+        encoder_gradients = tape.gradient(total_gen_loss, encoder.trainable_variables)
+        generator_optimizer.apply_gradients(zip(encoder_gradients, encoder.trainable_variables))
 
     if gan_mode != "wgan_gp":
         discriminator_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
@@ -329,7 +341,7 @@ def wgan_disc_apply(fake, real, seg, n_critic):
 @tf.function
 def distributed_train_step(dist_mini_batch):
     pr_g_adv_losses, pr_g_kl_losses, pr_g_vgg_losses, pr_g_feautre_losses, pr_disc_losses = \
-        mirrored_strategy.run(train_step, args=(dist_mini_batch,))
+        mirrored_strategy.run(train_step, args=(dist_mini_batch, random_style))
     r_g_adv_loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.MEAN,
                                             pr_g_adv_losses,
                                             axis=None)
