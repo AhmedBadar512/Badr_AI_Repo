@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest-gpu
+FROM tensorflow/tensorflow:2.5.0-gpu
 
 # RUN ln -s /usr/bin/pip3 /usr/bin/pip
 RUN pip install opencv-python==4.1.2.30 && \

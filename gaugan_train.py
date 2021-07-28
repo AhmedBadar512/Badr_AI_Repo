@@ -366,7 +366,8 @@ train_writer = tf.summary.create_file_writer(os.path.join(args.logdir, logdir))
 def save_models():
     K.models.save_model(generator, os.path.join(save_dir, MODEL, str(epoch + 1), "gen"))
     K.models.save_model(discriminator, os.path.join(save_dir, MODEL, str(epoch + 1), "disc"))
-    K.models.save_model(encoder, os.path.join(save_dir, MODEL, str(epoch + 1), "encoder"))
+    if not random_style:
+        K.models.save_model(encoder, os.path.join(save_dir, MODEL, str(epoch + 1), "encoder"))
     print("Model at Epoch {}, saved at {}".format(epoch + 1, os.path.join(save_dir, MODEL, str(epoch + 1))))
 
 
