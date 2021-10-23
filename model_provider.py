@@ -1,6 +1,7 @@
 from models.sinet import *
 from models.bisenet import *
 from models.unet import *
+from models.unet_expanded import *
 from models.faceswap_gan import *
 from models.cycle_gan import *
 from models.cut import *
@@ -12,6 +13,7 @@ __all__ = ['get_model']
 
 _models = {
     'unet': UNet,
+    'unet_exp': UNet_Expanded,
     'vunet': VUNet,
     'sinet_nie': get_nie_sinet,
     'bisenet_resnet18_celebamaskhq': bisenet_resnet18_celebamaskhq,

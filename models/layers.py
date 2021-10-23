@@ -271,3 +271,17 @@ class ResBlock_D(K.Model):
         if self.up_down == "down":
             x = self.resize(x)
         return x_s + x
+
+
+class CompDecomp(K.layers.Layer):
+    def __init__(self, comp_factor=16, threshold=1e-3):
+        super().__init__()
+        self.comp_factor = comp_factor
+        self.threshold = threshold
+
+    def call(self, inputs, *args, **kwargs):
+        if tf.shape(inputs)[1] < self.comp_factor or tf.shape(inputs)[2] < self.comp_factor:
+            return inputs
+        small_inputs = tf.image.resize(inputs, tf.shape(inputs)[1:3]//self.comp_factor, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        resized_inputs = tf.image.resize(small_inputs, tf.shape(inputs)[1:3])
+        return resized_inputs
