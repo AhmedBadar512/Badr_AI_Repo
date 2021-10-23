@@ -284,4 +284,5 @@ class CompDecomp(K.layers.Layer):
             return inputs
         small_inputs = tf.image.resize(inputs, tf.shape(inputs)[1:3]//self.comp_factor, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         resized_inputs = tf.image.resize(small_inputs, tf.shape(inputs)[1:3])
-        return resized_inputs
+        final_outputs = tf.where(inputs > self.threshold, inputs, resized_inputs)
+        return final_outputs
