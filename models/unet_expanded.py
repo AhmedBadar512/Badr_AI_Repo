@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras as K
 import tensorflow_probability as tfp
-from layers import CompDecomp
+from .layers import CompDecomp
 
 
 class UNet_Expanded(K.Model):
