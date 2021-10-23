@@ -280,7 +280,7 @@ class CompDecomp(K.layers.Layer):
         self.threshold = threshold
 
     def call(self, inputs, *args, **kwargs):
-        if tf.shape(inputs)[1] < self.comp_factor or tf.shape(inputs)[2] < self.comp_factor:
+        if inputs.shape[1] < self.comp_factor or inputs.shape[2] < self.comp_factor:
             return inputs
         small_inputs = tf.image.resize(inputs, tf.shape(inputs)[1:3]//self.comp_factor, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         resized_inputs = tf.image.resize(small_inputs, tf.shape(inputs)[1:3])
