@@ -32,13 +32,13 @@ args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help=
 args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
-args.add_argument("-l", "--logging_freq", type=int, default=50, help="Add to tfrecords after this many steps")
+args.add_argument("-l", "--logging_freq", type=int, default=1, help="Add to tfrecords after this many steps")
 args.add_argument("--loss", type=str, default="cross_entropy",
                   choices=["cross_entropy", "focal_loss", "binary_crossentropy", "RMI"],
                   help="Loss function")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
-args.add_argument("-wis", "--write_image_summary_steps", type=int, default=5, help="Add images to tfrecords "
+args.add_argument("-wis", "--write_image_summary_steps", type=int, default=2, help="Add images to tfrecords "
 
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
@@ -85,6 +85,7 @@ momentum = args.momentum
 model_name = args.model
 log_freq = args.logging_freq
 write_image_summary_steps = args.write_image_summary_steps
+EPOCHS = args.epochs
 time = str(datetime.datetime.now())
 time = time.translate(str.maketrans('', '', string.punctuation)).replace(" ", "-")[:-8]
 logdir = os.path.join(args.save_dir, "{}_epochs-{}_{}_bs-{}_{}_lr_{}-{}_{}_{}".format(dataset_name, epochs, args.loss,
@@ -168,10 +169,6 @@ with mirrored_strategy.scope():
         else:
             print("No file found at {}".format(os.path.join(args.load_model, "saved_model")))
 
-total_steps = 0
-step = 0
-curr_step = 0
-
 calc_loss = losses.get_loss(name=args.loss)
 cross_entropy_loss = losses.get_loss(name="cross_entropy")
 
@@ -200,6 +197,23 @@ def train_step(mini_batch, aux=False, pick=None):
     return loss, train_labs, train_logits
 
 
+def val_step(mini_batch, aux=False):
+    val_logits = model(mini_batch[0], training=False)
+    val_labs = tf.one_hot(mini_batch[1][..., 0], classes)
+    if aux:
+        losses = [tf.reduce_mean(calc_loss(val_labs, tf.image.resize(train_logit, size=val_labs.shape[
+                                                                                         1:3]))) if n == 0 else args.aux_weight * tf.reduce_mean(
+            calc_loss(
+                val_labs, tf.image.resize(train_logit, size=val_labs.shape[1:3]))) for n, train_logit in
+                  enumerate(val_logits)]
+        val_loss = tf.reduce_sum(losses)
+        val_logits = val_logits[0]
+    else:
+        val_loss = calc_loss(val_labs, val_logits)
+    val_loss = tf.reduce_mean(val_loss)
+    return val_loss, val_labs, val_logits
+
+
 @tf.function
 def distributed_train_step(dist_inputs):
     per_replica_losses, train_labs, train_logits = mirrored_strategy.run(train_step, args=(dist_inputs, aux))
@@ -215,6 +229,19 @@ def distributed_train_step(dist_inputs):
                train_logits
 
 
+@tf.function
+def distributed_val_step(dist_inputs):
+    per_replica_losses, val_labs, val_logits = mirrored_strategy.run(val_step, args=(dist_inputs, aux))
+    loss = mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
+                                    axis=None)
+    if len(physical_devices) > 1:
+        return loss, \
+               tf.concat(val_labs.values, axis=0), \
+               tf.concat(val_logits.values, axis=0)
+    else:
+        return loss, \
+               val_labs, \
+               val_logits
 # =========== Training ============ #
 
 
@@ -223,34 +250,67 @@ val_writer = tf.summary.create_file_writer(os.path.join(logdir, "val"))
 
 mIoU = K.metrics.MeanIoU(classes)
 
+if args.load_model is not None:
+    START_EPOCH = int(args.load_model.split("/")[-1])
+else:
+    START_EPOCH = 0
 
-def write_summary_images(batch, logits, train=True):
-    if len(physical_devices) > 1 and train:
-        tf.summary.image("images", tf.concat(batch[0].values, axis=0) / 255, step=curr_step)
+
+def write_summary_images(batch, logits):
+    if len(physical_devices) > 1:
+        tf.summary.image("images", tf.concat(batch[0].values, axis=0) / 255, step=c_step)
         processed_labs = tf.concat(batch[1].values, axis=0)
     else:
-        tf.summary.image("images", batch[0] / 255, step=curr_step)
+        tf.summary.image("images", batch[0] / 255, step=c_step)
         processed_labs = batch[1]
     if cs_19:
         colorize = lambda img: tf.cast(tf.squeeze(gpu_cs_labels(img)), dtype=tf.uint8)
-        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=curr_step)
-        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=curr_step)
+        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=c_step)
+        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=c_step)
     else:
         colorize = lambda img: tf.cast(tf.squeeze(gpu_random_labels(img, cmap)), dtype=tf.uint8)
-        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=curr_step)
-        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=curr_step)
+        tf.summary.image("pred", colorize(tf.argmax(logits, axis=-1)), step=c_step)
+        tf.summary.image("gt", colorize(processed_labs[..., tf.newaxis]), step=c_step)
 
 
 mini_batch, train_logits = None, None
 val_mini_batch, val_logits = None, None
 image_write_step = 0
-for epoch in range(epochs):
+c_step = 0
+
+
+def write_to_tensorboard(curr_step, image_write_step, writer, logits, batch):
+    if curr_step % log_freq == 0:
+        image_write_step += 1
+        with writer.as_default():
+            tf.summary.scalar("loss", loss,
+                              step=curr_step)
+            tf.summary.scalar("mIoU", mIoU.result().numpy(),
+                              step=curr_step)
+            if batch is not None and (step % write_image_summary_steps == 0):
+                conf_matrix = tf.math.confusion_matrix(gt, pred,
+                                                       num_classes=classes)
+                conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
+                tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
+                write_summary_images(batch, logits)
+    with writer.as_default():
+        tmp = lr_scheduler(step=curr_step)
+        tf.summary.scalar("Learning Rate", tmp, curr_step)
+
+
+# for epoch in range(epochs):
+for epoch in range(START_EPOCH, EPOCHS):
+    print("\n ----------- Epoch {} --------------\n".format(epoch))
+    step = 0
     if epoch % args.save_interval == 0:
         # K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
         model.save_weights(os.path.join(logdir, model_name, str(epoch), "saved_model"))
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
-    for step, mini_batch in enumerate(processed_train):
+    # for step, mini_batch in enumerate(processed_train):
+    for mini_batch in tqdm.tqdm(processed_train, total=total_samples // args.batch_size):
+        c_step = (epoch * total_samples // args.batch_size) + step
         loss, train_labs, train_logits = distributed_train_step(mini_batch)
+        step += 1
 
         # ======== mIoU calculation ==========
         mIoU.reset_states()
@@ -260,54 +320,47 @@ for epoch in range(epochs):
         # ====================================
         print("Epoch {}: {}/{}, Loss: {}, mIoU: {}".format(epoch, step * batch_size, total_samples,
                                                            loss.numpy(), mIoU.result().numpy()))
-        curr_step = total_steps + step
-        if curr_step % log_freq == 0:
-            image_write_step += 1
-            with train_writer.as_default():
-                tf.summary.scalar("loss", loss,
-                                  step=curr_step)
-                tf.summary.scalar("mIoU", mIoU.result().numpy(),
-                                  step=curr_step)
-                if mini_batch is not None and (step % write_image_summary_steps == 0):
-                    conf_matrix = tf.math.confusion_matrix(gt, pred,
-                                                           num_classes=classes)
-                    conf_matrix = conf_matrix / tf.reduce_sum(conf_matrix, axis=0)
-                    tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
-                    write_summary_images(mini_batch, train_logits)
-        with train_writer.as_default():
-            tmp = lr_scheduler(step=total_steps)
-            tf.summary.scalar("Learning Rate", tmp, curr_step)
+        write_to_tensorboard(c_step, image_write_step, train_writer, train_logits, mini_batch)
 
     mIoU.reset_states()
-    conf_matrix = None
-    total_steps += step
+    conf_matrix_list = []
     total_val_loss = []
-    for val_mini_batch in tqdm.tqdm(processed_val):
-        if len(physical_devices) > 1:
-            val_mini_batch = list(val_mini_batch)
-            val_mini_batch[0] = tf.concat(val_mini_batch[0].values, axis=0)
-            val_mini_batch[1] = tf.concat(val_mini_batch[1].values, axis=0)
-        if aux:
-            val_logits = model(val_mini_batch[0])[0]
-        else:
-            val_logits = model(val_mini_batch[0])
-        val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
+    val_steps = 1
+    for val_steps, val_mini_batch in tqdm.tqdm(enumerate(processed_val)):
+        loss, val_labs, val_logits = distributed_val_step(val_mini_batch)
         gt = tf.reshape(tf.argmax(val_labs, axis=-1), -1)
         pred = tf.reshape(tf.argmax(val_logits, axis=-1), -1)
         mIoU.update_state(gt, pred)
+        conf_matrix = tf.math.confusion_matrix(gt, pred,
+                                               num_classes=classes)
+        conf_matrix_list.append(conf_matrix)
         total_val_loss.append(tf.reduce_mean(calc_loss(val_labs, val_logits)))
-        if conf_matrix is None:
-            conf_matrix = tf.math.confusion_matrix(gt, pred, num_classes=classes)
-        else:
-            conf_matrix += tf.math.confusion_matrix(gt, pred, num_classes=classes)
+        # if len(physical_devices) > 1:
+        #     val_mini_batch = list(val_mini_batch)
+        #     val_mini_batch[0] = tf.concat(val_mini_batch[0].values, axis=0)
+        #     val_mini_batch[1] = tf.concat(val_mini_batch[1].values, axis=0)
+        # if aux:
+        #     val_logits = model(val_mini_batch[0])[0]
+        # else:
+        #     val_logits = model(val_mini_batch[0])
+        # val_labs = tf.one_hot(val_mini_batch[1][..., 0], classes)
+        # gt = tf.reshape(tf.argmax(val_labs, axis=-1), -1)
+        # pred = tf.reshape(tf.argmax(val_logits, axis=-1), -1)
+        # mIoU.update_state(gt, pred)
+        # total_val_loss.append(tf.reduce_mean(calc_loss(val_labs, val_logits)))
+        # if conf_matrix is None:
+        #     conf_matrix = tf.math.confusion_matrix(gt, pred, num_classes=classes)
+        # else:
+        #     conf_matrix += tf.math.confusion_matrix(gt, pred, num_classes=classes)
     val_loss = tf.reduce_mean(total_val_loss)
+    conf_matrix = tf.reduce_sum(conf_matrix_list, axis=0) / (args.batch_size * val_steps)
     with val_writer.as_default():
         tf.summary.scalar("loss", val_loss,
-                          step=total_steps)
+                          step=c_step)
         tf.summary.scalar("mIoU", mIoU.result().numpy(),
-                          step=total_steps)
+                          step=c_step)
         if val_mini_batch is not None:
-            conf_matrix /= tf.reduce_sum(conf_matrix, axis=0)
-            tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=total_steps)
-            write_summary_images(val_mini_batch, val_logits, train=False)
+            conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
+            tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=c_step)
+            write_summary_images(val_mini_batch, val_logits)
     print("Val Epoch {}: {}, mIoU: {}".format(epoch, val_loss, mIoU.result().numpy()))
