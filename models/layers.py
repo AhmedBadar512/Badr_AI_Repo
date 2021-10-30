@@ -35,9 +35,10 @@ class ConvBlock(K.layers.Layer):
                  strides=(1, 1),
                  padding='valid',
                  use_bias=True,
-                 norm_layer=None,
+                 norm_layer="batch",
                  activation='linear',
                  sn=False,
+                 dilation_rate=(1, 1),
                  **kwargs):
         super(ConvBlock, self).__init__(**kwargs)
         initializer = tf.random_normal_initializer(0., 0.02)
@@ -45,6 +46,7 @@ class ConvBlock(K.layers.Layer):
                                       kernel_size,
                                       strides,
                                       padding,
+                                      dilation_rate=dilation_rate,
                                       use_bias=use_bias,
                                       kernel_initializer=initializer)
         if sn:

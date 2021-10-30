@@ -1,103 +1,85 @@
 import tensorflow as tf
-from tensorflow.keras import backend as K
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import AveragePooling2D, Lambda, Conv2D, Activation, concatenate, BatchNormalization
-from resnet50 import ResNet50
+from tensorflow.keras.layers import AveragePooling2D, Conv2D
+from backbones import get_backbone
+import layers
 
 
-def Upsample(tensor, size):
-    '''bilinear upsampling'''
-    name = tensor.name.split('/')[0] + '_upsample'
+class ASPP(tf.keras.layers.Layer):
+    def __init__(self, activation='relu'):
+        super().__init__()
+        self.convblock1 = layers.ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock2 = layers.ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock3 = layers.ConvBlock(256, 3, dilation_rate=6, padding="same", use_bias=False,
+                                           activation=activation)
+        self.convblock4 = layers.ConvBlock(256, 3, dilation_rate=12, padding="same", use_bias=False,
+                                           activation=activation)
+        self.convblock5 = layers.ConvBlock(256, 3, dilation_rate=18, padding="same", use_bias=False,
+                                           activation=activation)
+        self.convblock6 = layers.ConvBlock(256, 1, dilation_rate=1, padding="same", use_bias=False,
+                                           activation=activation)
 
-    def bilinear_upsample(x, size):
-        resized = tf.image.resize(
-            images=x, size=size)
-        return resized
+    def build(self, input_shape):
+        self.pool2d = AveragePooling2D(pool_size=(input_shape[1], input_shape[2]), name='average_pooling')
 
-    y = Lambda(lambda x: bilinear_upsample(x, size),
-               output_shape=size, name=name)(tensor)
-    return y
+    def call(self, inputs, *args, **kwargs):
+        x = self.pool2d(inputs)
+        x_pool = self.convblock1(x)
+        x_1 = self.convblock2(x_pool)
+        x_6 = self.convblock3(x_1)
+        x_12 = self.convblock4(x_6)
+        x_18 = self.convblock5(x_12)
+        x_concat = tf.concat([x_pool, x_1, x_6, x_12, x_18])
 
-
-def ASPP(tensor):
-    '''atrous spatial pyramid pooling'''
-    dims = K.int_shape(tensor)
-
-    y_pool = AveragePooling2D(pool_size=(
-        dims[1], dims[2]), name='average_pooling')(tensor)
-    y_pool = Conv2D(filters=256, kernel_size=1, padding='same',
-                    kernel_initializer='he_normal', name='pool_1x1conv2d', use_bias=False)(y_pool)
-    y_pool = BatchNormalization(name=f'bn_1')(y_pool)
-    y_pool = Activation('relu', name=f'relu_1')(y_pool)
-
-    y_pool = Upsample(tensor=y_pool, size=[dims[1], dims[2]])
-
-    y_1 = Conv2D(filters=256, kernel_size=1, dilation_rate=1, padding='same',
-                 kernel_initializer='he_normal', name='ASPP_conv2d_d1', use_bias=False)(tensor)
-    y_1 = BatchNormalization(name=f'bn_2')(y_1)
-    y_1 = Activation('relu', name=f'relu_2')(y_1)
-
-    y_6 = Conv2D(filters=256, kernel_size=3, dilation_rate=6, padding='same',
-                 kernel_initializer='he_normal', name='ASPP_conv2d_d6', use_bias=False)(tensor)
-    y_6 = BatchNormalization(name=f'bn_3')(y_6)
-    y_6 = Activation('relu', name=f'relu_3')(y_6)
-
-    y_12 = Conv2D(filters=256, kernel_size=3, dilation_rate=12, padding='same',
-                  kernel_initializer='he_normal', name='ASPP_conv2d_d12', use_bias=False)(tensor)
-    y_12 = BatchNormalization(name=f'bn_4')(y_12)
-    y_12 = Activation('relu', name=f'relu_4')(y_12)
-
-    y_18 = Conv2D(filters=256, kernel_size=3, dilation_rate=18, padding='same',
-                  kernel_initializer='he_normal', name='ASPP_conv2d_d18', use_bias=False)(tensor)
-    y_18 = BatchNormalization(name=f'bn_5')(y_18)
-    y_18 = Activation('relu', name=f'relu_5')(y_18)
-
-    y = concatenate([y_pool, y_1, y_6, y_12, y_18], name='ASPP_concat')
-
-    y = Conv2D(filters=256, kernel_size=1, dilation_rate=1, padding='same',
-               kernel_initializer='he_normal', name='ASPP_conv2d_final', use_bias=False)(y)
-    y = BatchNormalization(name=f'bn_final')(y)
-    y = Activation('relu', name=f'relu_final')(y)
-    return y
+        return self.convblock6(x_concat)
 
 
-def DeepLabV3Plus(img_height, img_width, nclasses=66):
-    print('*** Building DeepLabv3Plus Network ***')
+class Deeplabv3plus(tf.keras.Model):
+    def __init__(self, backbone="resnet50v2", classes=19, activation='relu', aspp_output_index=2, conv_head_index=0):
+        super().__init__()
+        self.backbone = backbone
+        self.aspp = ASPP()
+        self.convblock1 = layers.ConvBlock(48, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock2 = layers.ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
+        self.convblock3 = layers.ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
+        self.conv_f = Conv2D(classes, (1, 1), name='output_layer')
+        self.aspp_output_index = aspp_output_index
+        self.conv_head_index = conv_head_index
 
-    base_model = ResNet50(input_shape=(
-        img_height, img_width, 3), weights='imagenet', include_top=False)
+    def build(self, input_shape):
+        self.backbone = get_backbone(self.backbone, input_shape=input_shape[1:])
+        self.get_resnet_backbone_outputs(self.backbone)
+        self.backbone_pruned = Model(inputs=self.backbone.input,
+                                     outputs=
+                                     [self.backbone_outputs[self.aspp_output_index].output,
+                                      self.backbone_outputs[self.conv_head_index].output],
+                                     name='DeepLabV3_Plus_backbone')
 
-    image_features = base_model.get_layer('activation_39').output
-    x_a = ASPP(image_features)
-    x_a = Upsample(tensor=x_a, size=[img_height // 4, img_width // 4])
+    def get_resnet_backbone_outputs(self, backbone, tmp_layer=None):
+        self.backbone_outputs = []
+        for layer in backbone.layers:
+            if "out" in layer.name:
+                if len(self.backbone_outputs) == 0:
+                    self.backbone_outputs.append(layer)
+                    tmp_layer = layer
+                    continue
+                self.backbone_outputs.append(layer)
+                if layer.output_shape[1:3] == tmp_layer.output_shape[1:3]:
+                    self.backbone_outputs.pop(-2)
+                tmp_layer = layer
 
-    x_b = base_model.get_layer('activation_9').output
-    x_b = Conv2D(filters=48, kernel_size=1, padding='same',
-                 kernel_initializer='he_normal', name='low_level_projection', use_bias=False)(x_b)
-    x_b = BatchNormalization(name=f'bn_low_level_projection')(x_b)
-    x_b = Activation('relu', name='low_level_activation')(x_b)
+    def call(self, inputs, training=None, mask=None):
+        x_aspp, x_b = self.backbone_pruned(inputs)
+        x_a = tf.image.resize(x_aspp, tf.shape(x_b)[1:3])
+        x_b = self.convblock1(x_b)
+        x_ab = tf.keras.layers.concatenate([x_a, x_b])
+        x_ab = self.convblock2(x_ab)
+        x_ab = self.convblock3(x_ab)
+        x_ab = tf.image.resize(x_ab, tf.shape(inputs)[1:3])
+        return self.conv_f(x_ab)
 
-    x = concatenate([x_a, x_b], name='decoder_concat')
 
-    x = Conv2D(filters=256, kernel_size=3, padding='same', activation='relu',
-               kernel_initializer='he_normal', name='decoder_conv2d_1', use_bias=False)(x)
-    x = BatchNormalization(name=f'bn_decoder_1')(x)
-    x = Activation('relu', name='activation_decoder_1')(x)
-
-    x = Conv2D(filters=256, kernel_size=3, padding='same', activation='relu',
-               kernel_initializer='he_normal', name='decoder_conv2d_2', use_bias=False)(x)
-    x = BatchNormalization(name=f'bn_decoder_2')(x)
-    x = Activation('relu', name='activation_decoder_2')(x)
-    x = Upsample(x, [img_height, img_width])
-
-    x = Conv2D(nclasses, (1, 1), name='output_layer')(x)
-    '''
-    x = Activation('softmax')(x) 
-    tf.losses.SparseCategoricalCrossentropy(from_logits=True)
-    Args:
-        from_logits: Whether `y_pred` is expected to be a logits tensor. By default,
-        we assume that `y_pred` encodes a probability distribution.
-    '''
-    model = Model(inputs=base_model.input, outputs=x, name='DeepLabV3_Plus')
-    print(f'*** Output_Shape => {model.output_shape} ***')
-    return model
+if __name__ == "__main__":
+    deeplab_model = Deeplabv3plus()
+    a = deeplab_model(tf.random.uniform((1, 368, 640, 3)))
+    print(a.shape)
