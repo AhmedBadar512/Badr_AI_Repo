@@ -54,6 +54,7 @@ class Deeplabv3plus(tf.keras.Model):
                                      [self.backbone_outputs[self.aspp_output_index].output,
                                       self.backbone_outputs[self.conv_head_index].output],
                                      name='DeepLabV3_Plus_backbone')
+        del self.backbone
 
     def get_resnet_backbone_outputs(self, backbone, tmp_layer=None):
         self.backbone_outputs = []
