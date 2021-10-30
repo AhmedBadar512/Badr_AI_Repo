@@ -161,12 +161,12 @@ with mirrored_strategy.scope():
     model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
     model(tf.random.uniform((1, args.height, args.width, 3), dtype=tf.float32))
     if args.load_model:
-        if os.path.exists(os.path.join(args.load_model, "saved_model.pb")):
-            pretrained_model = K.models.load_model(args.load_model)
-            model.set_weights(pretrained_model.get_weights())
+        if os.path.exists(os.path.join(args.load_model)):
+            # pretrained_model = K.models.load_model(args.load_model)
+            model.load_weights(os.path.join(args.load_model, "saved_model"))
             print("Model loaded from {} successfully".format(os.path.basename(args.load_model)))
         else:
-            print("No file found at {}".format(os.path.join(args.load_model, "saved_model.pb")))
+            print("No file found at {}".format(os.path.join(args.load_model, "saved_model")))
 
 total_steps = 0
 step = 0
@@ -246,7 +246,8 @@ val_mini_batch, val_logits = None, None
 image_write_step = 0
 for epoch in range(epochs):
     if epoch % args.save_interval == 0:
-        K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
+        # K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
+        model.save_weights(os.path.join(logdir, model_name, str(epoch), "saved_model"))
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
     for step, mini_batch in enumerate(processed_train):
         loss, train_labs, train_logits = distributed_train_step(mini_batch)

@@ -16,14 +16,14 @@ for gpu in physical_devices:
 
 
 def load_model_dynamic(pretrained_model_path, curr_model):
-    if os.path.exists(os.path.join(pretrained_model_path, "saved_model.pb")):
-        pretrained_model = tf.keras.models.load_model(pretrained_model_path)
+    if os.path.exists(os.path.join(pretrained_model_path, "saved_model")):
+        # pretrained_model = tf.keras.models.load_model(pretrained_model_path)
         curr_model(tf.random.uniform((1, height, width, 3), dtype=tf.float32, maxval=255))
         # curr_model.build(input_shape=(None, None, None, 3))
-        curr_model.set_weights(pretrained_model.get_weights())
+        curr_model.load_weights(os.path.join(pretrained_model_path, "saved_model"))
         print("Model loaded from {} successfully".format(os.path.basename(pretrained_model_path)))
     else:
-        print("No file found at {}".format(os.path.join(pretrained_model_path, "saved_model.pb")))
+        print("No file found at {}".format(os.path.join(pretrained_model_path, "saved_model")))
 
 
 def get_model_props(pretrained_model_path):

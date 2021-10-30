@@ -1,22 +1,22 @@
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import AveragePooling2D, Conv2D
-from backbones import get_backbone
-import layers
-
+from .backbones import get_backbone
+from .layers import ConvBlock
+from tensorflow.python.training.tracking.data_structures import NoDependency
 
 class ASPP(tf.keras.layers.Layer):
     def __init__(self, activation='relu'):
         super().__init__()
-        self.convblock1 = layers.ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
-        self.convblock2 = layers.ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
-        self.convblock3 = layers.ConvBlock(256, 3, dilation_rate=6, padding="same", use_bias=False,
-                                           activation=activation)
-        self.convblock4 = layers.ConvBlock(256, 3, dilation_rate=12, padding="same", use_bias=False,
-                                           activation=activation)
-        self.convblock5 = layers.ConvBlock(256, 3, dilation_rate=18, padding="same", use_bias=False,
-                                           activation=activation)
-        self.convblock6 = layers.ConvBlock(256, 1, dilation_rate=1, padding="same", use_bias=False,
+        self.convblock1 = ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock2 = ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock3 = ConvBlock(256, 3, dilation_rate=6, padding="same", use_bias=False,
+                                    activation=activation)
+        self.convblock4 = ConvBlock(256, 3, dilation_rate=12, padding="same", use_bias=False,
+                                    activation=activation)
+        self.convblock5 = ConvBlock(256, 3, dilation_rate=18, padding="same", use_bias=False,
+                                    activation=activation)
+        self.convblock6 = ConvBlock(256, 1, dilation_rate=1, padding="same", use_bias=False,
                                            activation=activation)
 
     def build(self, input_shape):
@@ -29,19 +29,19 @@ class ASPP(tf.keras.layers.Layer):
         x_6 = self.convblock3(x_1)
         x_12 = self.convblock4(x_6)
         x_18 = self.convblock5(x_12)
-        x_concat = tf.concat([x_pool, x_1, x_6, x_12, x_18])
+        x_concat = tf.keras.layers.concatenate([x_pool, x_1, x_6, x_12, x_18])
 
         return self.convblock6(x_concat)
 
 
 class Deeplabv3plus(tf.keras.Model):
-    def __init__(self, backbone="resnet50v2", classes=19, activation='relu', aspp_output_index=2, conv_head_index=0):
+    def __init__(self, backbone="resnet50v2", classes=19, activation='relu', aspp_output_index=2, conv_head_index=0, **kwargs):
         super().__init__()
         self.backbone = backbone
         self.aspp = ASPP()
-        self.convblock1 = layers.ConvBlock(48, 1, padding="same", use_bias=False, activation=activation)
-        self.convblock2 = layers.ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
-        self.convblock3 = layers.ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
+        self.convblock1 = ConvBlock(48, 1, padding="same", use_bias=False, activation=activation)
+        self.convblock2 = ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
+        self.convblock3 = ConvBlock(256, 3, padding="same", use_bias=False, activation=activation)
         self.conv_f = Conv2D(classes, (1, 1), name='output_layer')
         self.aspp_output_index = aspp_output_index
         self.conv_head_index = conv_head_index
@@ -57,7 +57,7 @@ class Deeplabv3plus(tf.keras.Model):
         del self.backbone
 
     def get_resnet_backbone_outputs(self, backbone, tmp_layer=None):
-        self.backbone_outputs = []
+        self.backbone_outputs = NoDependency([])
         for layer in backbone.layers:
             if "out" in layer.name:
                 if len(self.backbone_outputs) == 0:
@@ -71,6 +71,7 @@ class Deeplabv3plus(tf.keras.Model):
 
     def call(self, inputs, training=None, mask=None):
         x_aspp, x_b = self.backbone_pruned(inputs)
+        x_aspp = self.aspp(x_aspp)
         x_a = tf.image.resize(x_aspp, tf.shape(x_b)[1:3])
         x_b = self.convblock1(x_b)
         x_ab = tf.keras.layers.concatenate([x_a, x_b])
