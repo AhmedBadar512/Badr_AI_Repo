@@ -1,6 +1,7 @@
 from models.sinet import *
 from models.bisenet import *
 from models.unet import *
+from models.deeplabv3 import *
 from models.unet_expanded import *
 from models.faceswap_gan import *
 from models.cycle_gan import *
@@ -17,6 +18,7 @@ _models = {
     'vunet': VUNet,
     'sinet_nie': get_nie_sinet,
     'bisenet_resnet18_celebamaskhq': bisenet_resnet18_celebamaskhq,
+    'deeplabv3': Deeplabv3plus,
 }
 
 _ganmodels = {
