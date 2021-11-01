@@ -1,38 +1,7 @@
 import tensorflow as tf
-from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Conv2D
 from .backbones import get_backbone
 from .layers import ConvBlock
-from tensorflow.python.training.tracking.data_structures import NoDependency
-
-
-# class ASPP(tf.keras.layers.Layer):
-#     def __init__(self, activation='relu'):
-#         super().__init__()
-#         self.convblock1 = ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
-#         self.convblock2 = ConvBlock(256, 1, padding="same", use_bias=False, activation=activation)
-#         self.convblock3 = ConvBlock(256, 3, dilation_rate=6, padding="same", use_bias=False,
-#                                     activation=activation)
-#         self.convblock4 = ConvBlock(256, 3, dilation_rate=12, padding="same", use_bias=False,
-#                                     activation=activation)
-#         self.convblock5 = ConvBlock(256, 3, dilation_rate=18, padding="same", use_bias=False,
-#                                     activation=activation)
-#         self.convblock6 = ConvBlock(256, 1, dilation_rate=1, padding="same", use_bias=False,
-#                                            activation=activation)
-#
-#     def build(self, input_shape):
-#         self.pool2d = AveragePooling2D(pool_size=(input_shape[1], input_shape[2]), name='average_pooling')
-#
-#     def call(self, inputs, *args, **kwargs):
-#         x = self.pool2d(inputs)
-#         x_pool = self.convblock1(x)
-#         x_1 = self.convblock2(x_pool)
-#         x_6 = self.convblock3(x_1)
-#         x_12 = self.convblock4(x_6)
-#         x_18 = self.convblock5(x_12)
-#         x_concat = tf.keras.layers.concatenate([x_pool, x_1, x_6, x_12, x_18])
-#
-#         return self.convblock6(x_concat)
 
 
 class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
@@ -47,6 +16,7 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
         self.conv1, self.conv2 = None, None
         self.pool = None
         self.out1, self.out6, self.out12, self.out18 = None, None, None, None
+        self.concat = tf.keras.layers.Concatenate(axis=-1)
 
     @staticmethod
     def _get_conv_block(kernel_size, dilation_rate, use_bias=False):
@@ -91,7 +61,7 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
     def call(self, inputs, training=None, **kwargs):
         tensor = self.avg_pool(inputs)
         tensor = self.conv1(tensor)
-        tensor = tf.keras.layers.Concatenate(axis=-1)([
+        tensor = self.concat([
             self.pool(tensor),
             self.out1(inputs),
             self.out6(inputs),
