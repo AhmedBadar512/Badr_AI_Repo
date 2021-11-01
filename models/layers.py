@@ -40,15 +40,14 @@ class ConvBlock(K.layers.Layer):
                  sn=False,
                  dilation_rate=(1, 1),
                  **kwargs):
-        super(ConvBlock, self).__init__(**kwargs)
-        initializer = tf.random_normal_initializer(0., 0.02)
+        super(ConvBlock, self).__init__()
         self.conv2d = K.layers.Conv2D(filters,
                                       kernel_size,
                                       strides,
                                       padding,
                                       dilation_rate=dilation_rate,
                                       use_bias=use_bias,
-                                      kernel_initializer=initializer)
+                                      **kwargs)
         if sn:
             self.conv2d = tfa.layers.SpectralNormalization(self.conv2d)
         self.activation = K.layers.Activation(activation)
@@ -61,7 +60,7 @@ class ConvBlock(K.layers.Layer):
 
     def call(self, inputs, training=None):
         x = self.conv2d(inputs)
-        x = self.normalization(x)
+        x = self.normalization(x, training)
         x = self.activation(x)
 
         return x
@@ -80,14 +79,13 @@ class ConvTransposeBlock(K.layers.Layer):
                  norm_layer=None,
                  activation='linear',
                  **kwargs):
-        super(ConvTransposeBlock, self).__init__(**kwargs)
-        initializer = tf.random_normal_initializer(0., 0.02)
+        super(ConvTransposeBlock, self).__init__()
         self.convT2d = K.layers.Conv2DTranspose(filters,
                                                 kernel_size,
                                                 strides,
                                                 padding,
                                                 use_bias=use_bias,
-                                                kernel_initializer=initializer)
+                                                **kwargs)
         self.activation = K.layers.Activation(activation)
         if norm_layer == 'batch':
             self.normalization = K.layers.BatchNormalization()

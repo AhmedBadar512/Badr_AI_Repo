@@ -12,5 +12,7 @@ def get_backbone(name="resnet50", **kwargs):
         return tf.keras.applications.ResNet101V2(include_top=False, weights='imagenet', **kwargs)
     elif name.lower() == "resnet152":
         return tf.keras.applications.ResNet152(include_top=False, weights='imagenet', **kwargs)
+    elif name.lower() == "xception":
+        return tf.keras.applications.Xception(include_top=False, weights='imagenet', **kwargs)
     else:
         raise ModuleNotFoundError(f'Model "{name}" not yet implemented')
