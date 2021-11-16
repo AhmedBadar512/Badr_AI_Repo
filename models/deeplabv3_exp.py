@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D
 from .backbones import get_backbone
-from .layers import ConvBlock
+from .layers import ConvBlock, CompDecomp
 
 
 class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
@@ -76,7 +76,7 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
         return tensor
 
 
-class Deeplabv3plus(tf.keras.Model):
+class Deeplabv3PlusExpanded(tf.keras.Model):
     def __init__(self, backbone="resnet50", classes=19, activation='relu', **kwargs):
         super().__init__()
         self.backbone = backbone
@@ -97,6 +97,8 @@ class Deeplabv3plus(tf.keras.Model):
     def build(self, input_shape):
         self.get_aspp_feature_backbone(input_shape)     # Spatial factor reduction of 32 e.g. 512 -> 16
         self.get_feature_2_backbone(input_shape)        # Spatial factor reduction of 8 e.g. 512 -> 64
+        self.exp4 = CompDecomp(4)
+        self.exp8 = CompDecomp(8)
 
     def get_aspp_feature_backbone(self, input_shape):
         backbone = get_backbone(self.backbone, input_shape=input_shape[1:])
@@ -112,18 +114,21 @@ class Deeplabv3plus(tf.keras.Model):
 
     def call(self, inputs, training=None, mask=None):
         x_aspp = self.backbone_aspp(inputs)
+        x_aspp = self.exp4(x_aspp)
         x_b = self.backbone_b(inputs)
+        x_b = self.exp8(x_b)
         x_aspp = self.aspp(x_aspp, training)
         x_a = tf.image.resize(x_aspp, tf.shape(x_b)[1:3])
         x_b = self.convblock1(x_b, training)
         x_ab = tf.keras.layers.concatenate([x_a, x_b])
         x_ab = self.convblock2(x_ab, training)
+        x_ab = self.exp8(x_ab)
         x_ab = self.convblock3(x_ab, training)
         x_ab = tf.image.resize(x_ab, tf.shape(inputs)[1:3])
         return self.conv_f(x_ab)
 
 
 if __name__ == "__main__":
-    deeplab_model = Deeplabv3plus()
-    a = deeplab_model(tf.random.uniform((1, 368, 640, 3)))
+    deeplab_model = Deeplabv3PlusExpanded()
+    a = deeplab_model(tf.random.uniform((1, 512, 512, 3)))
     print(a.shape)
