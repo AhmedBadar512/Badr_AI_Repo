@@ -15,7 +15,6 @@ __all__ = ['get_model']
 _models = {
     'unet': UNet,
     'unet_exp': UNet_Expanded,
-    'vunet': VUNet,
     'sinet_nie': get_nie_sinet,
     'bisenet_resnet18_celebamaskhq': bisenet_resnet18_celebamaskhq,
     'deeplabv3': Deeplabv3plus,

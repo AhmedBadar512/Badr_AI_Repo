@@ -164,11 +164,8 @@ with mirrored_strategy.scope():
         optimizer = K.optimizers.RMSprop(learning_rate=lr_scheduler, momentum=momentum)
     else:
         optimizer = K.optimizers.SGD(learning_rate=lr_scheduler, momentum=momentum)
-    try:  # TODO: Find a better way to do this later.
-        model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux,
-                          backbone=args.backbone)
-    except:
-        model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux)
+    model = get_model(model_name, classes=classes, in_size=(args.height, args.width), aux=aux,
+                      backbone=args.backbone)
     model(tf.random.uniform((1, args.height, args.width, 3), dtype=tf.float32)) if random_crop_size is None else model(tf.random.uniform((1, random_crop_size[0], random_crop_size[1], 3), dtype=tf.float32))
     model.summary()
     if args.load_model:
@@ -301,27 +298,24 @@ def write_to_tensorboard(curr_step, image_write_step, writer, logits, batch):
                               step=curr_step)
             tf.summary.scalar("mIoU", mIoU.result().numpy(),
                               step=curr_step)
-            if batch is not None and (step % write_image_summary_steps == 0):
-                conf_matrix = tf.math.confusion_matrix(gt, pred,
-                                                       num_classes=classes)
-                conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (
-                            tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
-                tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
-                write_summary_images(batch, logits)
+        if curr_step % write_image_summary_steps == 0:
+            conf_matrix = tf.math.confusion_matrix(gt, pred,
+                                                   num_classes=classes)
+            conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (
+                        tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
+            tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
+            write_summary_images(batch, logits)
     with writer.as_default():
         tmp = lr_scheduler(step=curr_step)
         tf.summary.scalar("Learning Rate", tmp, curr_step)
 
 
-# for epoch in range(epochs):
 for epoch in range(START_EPOCH, EPOCHS):
     print("\n ----------- Epoch {} --------------\n".format(epoch))
     step = 0
     if epoch % args.save_interval == 0:
-        # K.models.save_model(model, os.path.join(logdir, model_name, str(epoch)))
         model.save_weights(os.path.join(logdir, model_name, str(epoch), "saved_model"))
         print("Model at Epoch {}, saved at {}".format(epoch, os.path.join(logdir, model_name, str(epoch))))
-    # for step, mini_batch in enumerate(processed_train):
     for mini_batch in tqdm.tqdm(processed_train, total=total_samples // args.batch_size):
         c_step = (epoch * total_samples // args.batch_size) + step
         loss, train_labs, train_logits = distributed_train_step(mini_batch)

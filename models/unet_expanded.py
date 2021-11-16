@@ -14,6 +14,7 @@ class UNet_Expanded(K.Model):
                  aux=False,
                  variational=False,
                  activation='relu',
+                 backbone=None,
                  **kwargs):
         super().__init__(**kwargs)
         assert (in_channels > 0)
