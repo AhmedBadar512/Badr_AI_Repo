@@ -41,7 +41,7 @@ args.add_argument("--loss", type=str, default="cross_entropy",
                   help="Loss function")
 args.add_argument("-bs", "--batch_size", type=int, default=4, help="Size of mini-batch")
 args.add_argument("-si", "--save_interval", type=int, default=5, help="Save interval for model")
-args.add_argument("-wis", "--write_image_summary_steps", type=int, default=2, help="Add images to tfrecords "
+args.add_argument("-wis", "--write_image_summary_steps", type=int, default=50, help="Add images to tfrecords "
 
                                                                                    "after these many logging steps")
 args.add_argument("-m", "--model", type=str, default="bisenet_resnet18_celebamaskhq", help="Select model")
