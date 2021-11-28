@@ -54,7 +54,7 @@ class FCOSHead(K.Model):
             bbox_pred = self.scales[l](self.bbox_pred(box_tower))
             if self.norm_reg_targets:
                 bbox_pred = tf.nn.relu(bbox_pred)
-                if self.training:
+                if training:
                     bbox_reg.append(bbox_pred)
                 else:
                     bbox_reg.append(bbox_pred * self.fpn_strides[l])
