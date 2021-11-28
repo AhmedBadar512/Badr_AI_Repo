@@ -11,9 +11,9 @@ class ConvBlock(K.layers.Layer):
                  filters,
                  kernel_size,
                  strides=(1, 1),
-                 padding='valid',
+                 padding='same',
                  use_bias=True,
-                 norm_layer="batch",
+                 norm_layer=None,
                  activation='linear',
                  sn=False,
                  dilation_rate=(1, 1),
@@ -29,10 +29,8 @@ class ConvBlock(K.layers.Layer):
         if sn:
             self.conv2d = tfa.layers.SpectralNormalization(self.conv2d)
         self.activation = K.layers.Activation(activation)
-        if norm_layer == 'batch':
-            self.normalization = K.layers.BatchNormalization()
-        elif norm_layer == 'instance':
-            self.normalization = tfa.layers.InstanceNormalization()
+        if norm_layer:
+            self.normalization = norm_layer()
         else:
             self.normalization = tf.identity
 
@@ -89,14 +87,15 @@ class LastLevelMaxPool(K.layers.Layer):
 
 
 class FPN(K.Model):
-    def __init__(self, out_channels, top_blocks=None):
+    def __init__(self, out_channels, top_blocks=None, norm_layer=K.layers.BatchNormalization):
         super().__init__()
         self.out_channels = out_channels
         self.top_blocks = top_blocks
+        self.norm_layer = norm_layer
 
     def build(self, input_shape):
-        self.base_convs = [ConvBlock(self.out_channels, 1, padding='same') for _ in range(len(input_shape))]
-        self.second_convs = [ConvBlock(self.out_channels, 3, 1, padding='same') for _ in range(len(input_shape))]
+        self.base_convs = [ConvBlock(self.out_channels, 1, padding='same', norm_layer=self.norm_layer) for _ in range(len(input_shape))]
+        self.second_convs = [ConvBlock(self.out_channels, 3, 1, padding='same', norm_layer=self.norm_layer) for _ in range(len(input_shape))]
 
     def call(self, inputs, training=None, mask=None):
         results = []
@@ -117,11 +116,16 @@ class FPN(K.Model):
         return results
 
 
-backbone = K.applications.ResNet50(include_top=False, weights='imagenet', input_shape=(512, 512, 3))
-outputs = extract_outputs_at_spatial_steps(backbone)
-random = tf.random.uniform((1, 512, 512, 3))
+def get_backbone_outputs():
+    backbone = K.applications.ResNet50(include_top=False, weights='imagenet', input_shape=(512, 512, 3))
+    return extract_outputs_at_spatial_steps(backbone)
 
-fpn_outs = FPN(47, LastLevelMaxPool())(outputs)
-[print(fpn_out.shape) for fpn_out in outputs]
-print("------------------")
-[print(fpn_out.shape) for fpn_out in fpn_outs]
+
+if __name__ == "__main__":
+
+    random = tf.random.uniform((1, 512, 512, 3))
+    outputs = get_backbone_outputs()
+    fpn_outs = FPN(47, LastLevelMaxPool())(outputs)
+    [print(fpn_out.shape) for fpn_out in outputs]
+    print("------------------")
+    [print(fpn_out.shape) for fpn_out in fpn_outs]
