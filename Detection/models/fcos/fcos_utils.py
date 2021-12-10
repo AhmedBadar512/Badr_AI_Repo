@@ -5,6 +5,71 @@ import tensorflow_addons as tfa
 
 
 # ======================= FCOS Postprocessor =========================== #
+class Scale(K.layers.Layer):
+    def __init__(self, init_value=1.0):
+        super(Scale, self).__init__()
+        self.init_value = init_value
+
+    def call(self, inputs, *args, **kwargs):
+        return inputs * self.init_value
+
+
+class FCOSHead(K.Model):
+    def __init__(self, n_classes, fpn_strides=None, num_convs=4, norm_reg_targets=False, centerness_on_reg=False,
+                 use_dcn=False, norm_layer=tfa.layers.GroupNormalization):
+        super(FCOSHead, self).__init__()
+        if fpn_strides is None:
+            fpn_strides = [8, 16, 32, 64, 128]
+        self.n_classes = n_classes - 1
+        self.fpn_strides = fpn_strides
+        self.norm_reg_targets = norm_reg_targets
+        self.centerness_on_reg = centerness_on_reg
+        self.use_dcn = use_dcn  # TODO: Implement and add later
+        # TODO: Add and implement FCOS prob
+        self.num_convs = num_convs
+        self.norm_layer = norm_layer
+        self.cls_logits = ConvBlock(self.n_classes, 3, 1)
+        self.bbox_pred = ConvBlock(4, 3, 1)
+        self.centerness = ConvBlock(1, 3, 1)
+        self.scales = [Scale(1.0) for _ in range(len(fpn_strides))]
+
+    def build(self, input_shape):
+        self.cls_tower = K.Sequential()
+        self.bbox_tower = K.Sequential()
+        [self.cls_tower.add(ConvBlock(input_shape[0][-1], 3, 1, "same", norm_layer=self.norm_layer, activation="relu"))
+         for _
+         in range(self.num_convs)]
+        [self.bbox_tower.add(ConvBlock(input_shape[0][-1], 3, 1, "same", norm_layer=self.norm_layer, activation="relu"))
+         for
+         _ in range(self.num_convs)]
+
+    def call(self, inputs, training=None, mask=None):
+        logits = []
+        bbox_reg = []
+        centerness = []
+        for l, feature in enumerate(inputs):
+            cls_tower = self.cls_tower(feature)
+            box_tower = self.bbox_tower(feature)
+
+            logits.append(self.cls_logits(cls_tower))
+            if self.centerness_on_reg:
+                centerness.append(self.centerness(box_tower))
+            else:
+                centerness.append(self.centerness(cls_tower))
+
+            bbox_pred = self.scales[l](self.bbox_pred(box_tower))
+            if self.norm_reg_targets:
+                bbox_pred = tf.nn.relu(bbox_pred)
+                if training:
+                    bbox_reg.append(bbox_pred)
+                else:
+                    bbox_reg.append(bbox_pred * self.fpn_strides[l])
+            else:
+                bbox_reg.append(tf.math.exp(bbox_pred))
+        return logits, bbox_reg, centerness
+
+
+# ======================= FCOS Postprocessor =========================== #
 def boxlist_ml_nms(
         boxlist, nms_thresh, max_proposals=-1, score_field="scores", label_field="labels"
 ):
@@ -275,68 +340,6 @@ def remove_small_boxes(boxlist, min_size):
     return boxlist[keep]
 
 
-class Scale(K.layers.Layer):
-    def __init__(self, init_value=1.0):
-        super(Scale, self).__init__()
-        self.init_value = init_value
-
-    def call(self, inputs, *args, **kwargs):
-        return inputs * self.init_value
-
-
-class FCOSHead(K.Model):
-    def __init__(self, n_classes, fpn_strides=None, num_convs=4, norm_reg_targets=False, centerness_on_reg=False,
-                 use_dcn=False, norm_layer=tfa.layers.GroupNormalization):
-        super(FCOSHead, self).__init__()
-        if fpn_strides is None:
-            fpn_strides = [8, 16, 32, 64, 128]
-        self.n_classes = n_classes - 1
-        self.fpn_strides = fpn_strides
-        self.norm_reg_targets = norm_reg_targets
-        self.centerness_on_reg = centerness_on_reg
-        self.use_dcn = use_dcn  # TODO: Implement and add later
-        # TODO: Add and implement FCOS prob
-        self.num_convs = num_convs
-        self.norm_layer = norm_layer
-        self.cls_logits = ConvBlock(n_classes, 3, 1)
-        self.bbox_pred = ConvBlock(4, 3, 1)
-        self.centerness = ConvBlock(1, 3, 1)
-        self.scales = [Scale(1.0) for _ in range(len(fpn_strides))]
-
-    def build(self, input_shape):
-        self.cls_tower = K.Sequential()
-        self.bbox_tower = K.Sequential()
-        [self.cls_tower.add(ConvBlock(input_shape[0][-1], 3, 1, 1, norm_layer=self.norm_layer, activation="relu")) for _
-         in range(self.num_convs)]
-        [self.bbox_tower.add(ConvBlock(input_shape[0][-1], 3, 1, 1, norm_layer=self.norm_layer, activation="relu")) for
-         _ in range(self.num_convs)]
-
-    def call(self, inputs, training=None, mask=None):
-        logits = []
-        bbox_reg = []
-        centerness = []
-        for l, feature in enumerate(inputs):
-            cls_tower = self.cls_tower(feature)
-            box_tower = self.bbox_tower(feature)
-
-            logits.append(self.cls_logits(cls_tower))
-            if self.centerness_on_reg:
-                centerness.append(self.centerness(box_tower))
-            else:
-                centerness.append(self.centerness(cls_tower))
-
-            bbox_pred = self.scales[l](self.bbox_pred(box_tower))
-            if self.norm_reg_targets:
-                bbox_pred = tf.nn.relu(bbox_pred)
-                if training:
-                    bbox_reg.append(bbox_pred)
-                else:
-                    bbox_reg.append(bbox_pred * self.fpn_strides[l])
-            else:
-                bbox_reg.append(tf.math.exp(bbox_pred))
-        return logits, bbox_reg, centerness
-
-
 class FCOSPostProcessor(K.layers.Layer):
     def __init__(self,
                  pre_nms_thresh,
@@ -356,16 +359,18 @@ class FCOSPostProcessor(K.layers.Layer):
         self.bbox_aug_enabled = bbox_aug_enabled
 
     def call_on_single_map(self, locations, box_cls, box_regression, centerness, image_sizes):
-        N, H, W, C = box_cls
+        _, H, W, C = tf.unstack(tf.shape(box_cls))
+        N = 1  # Done as for inference batch size is mostly 1, TODO: Add dynamic batch inference later
         box_cls = tf.nn.sigmoid(tf.reshape(box_cls, (N, H * W, C)))
         box_regression = tf.reshape(box_regression, (N, H * W, 4))
         centerness = tf.nn.sigmoid(tf.reshape(centerness, (N, H * W, 1)))
 
-        candidate_inds = tf.cond(box_cls > self.pre_nms_thresh, True,
-                                 False)  # replaced box_cls > self.pre_nms_thresh with this to hide pycharm prompt
+        # candidate_inds = tf.cond(box_cls > self.pre_nms_thresh, True,
+        #                          False)  # replaced box_cls > self.pre_nms_thresh with this to hide pycharm prompt
+        candidate_inds = box_cls > self.pre_nms_thresh
         pre_nms_top_n = tf.reshape(candidate_inds, (N, -1))
-        pre_nms_top_n = tf.reduce_sum(pre_nms_top_n, axis=-1)
-        pre_nms_top_n = tf.clip_by_value(pre_nms_top_n, clip_value_max=self.pre_nms_top_n)
+        pre_nms_top_n = tf.reduce_sum(tf.cast(pre_nms_top_n, dtype=tf.float32), axis=-1)
+        pre_nms_top_n = tf.clip_by_value(pre_nms_top_n, clip_value_min=0, clip_value_max=self.pre_nms_top_n)
 
         box_cls = centerness * box_cls
         results = []
@@ -377,7 +382,7 @@ class FCOSPostProcessor(K.layers.Layer):
                 per_candidate_inds]  # Remove anything below the nms_thresh, (H*W, C) to -> (n) where n is number of values over nms
 
             per_candidate_nonzeros = tf.stack(tf.experimental.numpy.nonzero(per_candidate_inds), axis=1)
-            per_box_loc = per_candidate_nonzeros[:, 0]
+            per_box_loc = tf.cast(per_candidate_nonzeros[:, 0], dtype=tf.int64)
             per_class = per_candidate_nonzeros[:, 1] + 1
 
             per_box_regression = box_regression[i]
@@ -451,21 +456,21 @@ class FCOSPostProcessor(K.layers.Layer):
 
 
 # ======================= FCOS Loss Calculation =========================== #
-class IOULoss(K.layers.Layer):
+class IOULoss(K.losses.Loss):
     def __init__(self, loss_type="iou"):
         super(IOULoss, self).__init__()
         self.loss_type = loss_type
 
-    def forward(self, pred, target, weight=None):
-        pred_left = pred[:, 0]
-        pred_top = pred[:, 1]
-        pred_right = pred[:, 2]
-        pred_bottom = pred[:, 3]
+    def call(self, y_true, y_pred, weight=None):
+        pred_left = y_pred[:, 0]
+        pred_top = y_pred[:, 1]
+        pred_right = y_pred[:, 2]
+        pred_bottom = y_pred[:, 3]
 
-        target_left = target[:, 0]
-        target_top = target[:, 1]
-        target_right = target[:, 2]
-        target_bottom = target[:, 3]
+        target_left = y_true[:, 0]
+        target_top = y_true[:, 1]
+        target_right = y_true[:, 2]
+        target_bottom = y_true[:, 3]
 
         target_area = (target_left + target_right) * (target_top + target_bottom)
         pred_area = (pred_left + pred_right) * (pred_top + pred_bottom)
@@ -495,18 +500,20 @@ class IOULoss(K.layers.Layer):
             losses = 1 - gious
         else:
             raise NotImplementedError
-
         if weight is not None and tf.reduce_sum(weight) > 0:
             return tf.reduce_sum(losses * weight)
-        else:
-            return tf.reduce_sum(losses)
+        return tf.reduce_sum(losses)
 
 
 class FCOSLossComputation(object):
-    def __init__(self, focal_alpha, focal_gamma, fpn_strides, center_sampling_radius, iou_loss_type, norm_reg_targets,
-                 object_sizes_of_interest):
+    def __init__(self, fpn_strides=None, center_sampling_radius=0, iou_loss_type="iou", norm_reg_targets=False,
+                 object_sizes_of_interest=None):
         super(FCOSLossComputation, self).__init__()
-        self.cls_loss_func = tfa.losses.SigmoidFocalCrossEntropy(alpha=focal_alpha, gamma=focal_gamma)
+        if object_sizes_of_interest is None:
+            object_sizes_of_interest = [[-1, 32], [32, 64], [64, 128], [128, 256], [256, 100000000], ]
+        if fpn_strides is None:
+            fpn_strides = [8, 16, 32, 64, 128]
+        self.cls_loss_func = tfa.losses.SigmoidFocalCrossEntropy()
         self.fpn_strides = fpn_strides
         self.center_sampling_radius = center_sampling_radius
         self.iou_loss_type = iou_loss_type
@@ -554,10 +561,10 @@ class FCOSLossComputation(object):
         inside_gt_bbox_mask = center_bbox.min(-1)[0] > 0
         return inside_gt_bbox_mask
 
-    def prepare_targets(self, points, targets):
+    def prepare_targets(self, points, targets):  # TODO: Check how this function behaves for empty targets.
         expanded_object_sizes_of_interest = []
         for l, points_per_level in enumerate(points):
-            object_sizes_of_interest_per_level = tf.Tensor(self.object_sizes_of_interest[l])
+            object_sizes_of_interest_per_level = tf.convert_to_tensor(self.object_sizes_of_interest[l])
             expanded_object_sizes_of_interest.append(
                 # object_sizes_of_interest_per_level[None].expand(len(points_per_level), -1)
                 tf.repeat(object_sizes_of_interest_per_level[tf.newaxis], (len(points_per_level), 1))
@@ -598,7 +605,7 @@ class FCOSLossComputation(object):
         return labels_level_first, reg_targets_level_first
 
     def compute_targets_for_locations(
-        self, locations, targets, object_sizes_of_interest
+            self, locations, targets, object_sizes_of_interest
     ):
         INF = 1e9
         labels = []
@@ -639,8 +646,8 @@ class FCOSLossComputation(object):
             max_reg_targets_per_im = tf.reduce_max(reg_targets_per_im, axis=2)[0]
             # limit the regression range for each location
             is_cared_in_the_level = (
-                max_reg_targets_per_im >= object_sizes_of_interest[:, [0]]
-            ) & (max_reg_targets_per_im <= object_sizes_of_interest[:, [1]])
+                                            max_reg_targets_per_im >= object_sizes_of_interest[:, [0]]
+                                    ) & (max_reg_targets_per_im <= object_sizes_of_interest[:, [1]])
 
             # locations_to_gt_area = area[None].repeat(len(locations), 1)
             locations_to_gt_area = tf.repeat(area[tf.newaxis], repeats=[len(locations), 1])
@@ -650,7 +657,8 @@ class FCOSLossComputation(object):
             # if there are still more than one objects for a location,
             # we choose the one with minimal area
             # locations_to_min_area, locations_to_gt_inds = locations_to_gt_area.min(dim=1)
-            locations_to_min_area, locations_to_gt_inds = tf.reduce_min(locations_to_gt_area, axis=1), tf.argmin(locations_to_gt_area, axis=1)
+            locations_to_min_area, locations_to_gt_inds = tf.reduce_min(locations_to_gt_area, axis=1), tf.argmin(
+                locations_to_gt_area, axis=1)
 
             reg_targets_per_im = reg_targets_per_im[
                 range(len(locations)), locations_to_gt_inds
@@ -671,10 +679,11 @@ class FCOSLossComputation(object):
         # centerness = (left_right.min(dim=-1)[0] / left_right.max(dim=-1)[0]) * (
         #     top_bottom.min(dim=-1)[0] / top_bottom.max(dim=-1)[0]
         # )
-        centerness = (tf.reduce_min(left_right, axis=-1) / tf.reduce_max(left_right, axis=-1)) * (tf.reduce_min(top_bottom, axis=-1) / tf.reduce_max(top_bottom, axis=-1))
+        centerness = (tf.reduce_min(left_right, axis=-1) / tf.reduce_max(left_right, axis=-1)) * (
+                    tf.reduce_min(top_bottom, axis=-1) / tf.reduce_max(top_bottom, axis=-1))
         return tf.math.sqrt(centerness)
 
-    def __call__(self, locations, box_clss, box_regression, centerness, targets):
+    def __call__(self, locations, box_clss, box_regression, centerness, targets=None):
         """
         Arguments:
             locations (list[BoxList])
@@ -688,9 +697,11 @@ class FCOSLossComputation(object):
             reg_loss (Tensor)
             centerness_loss (Tensor)
         """
+        if targets is None:
+            targets = []
         idxs = []
         tars = []
-        num_classes = box_clss[0].shape[1]
+        num_classes = box_clss[0].shape[-1]
         for i, target in enumerate(targets):
             target = target["boxes"]
             if target.bbox.shape[0] != 0:
@@ -700,14 +711,13 @@ class FCOSLossComputation(object):
         box_cls = []
         for box_cl in box_clss:
             box_cls.append(box_cl[idxs])
-
         labels, reg_targets = self.prepare_targets(locations, tars)
         box_cls_flatten = []
         box_regression_flatten = []
         centerness_flatten = []
         labels_flatten = []
         reg_targets_flatten = []
-        for l in range(len(labels)):    # TODO: Fix this Badr
+        for l in range(len(labels)):  # TODO: Fix this Badr
             box_cls_flatten.append(
                 tf.reshape(box_cls[l], (-1, num_classes))
             )
@@ -755,16 +765,16 @@ class FCOSLossComputation(object):
             )
 
             reg_loss = (
-                self.box_reg_loss_func(
-                    box_regression_flatten, reg_targets_flatten, centerness_targets
-                )
-                / sum_centerness_targets_avg_per_gpu
+                    self.box_reg_loss_func(
+                        box_regression_flatten, reg_targets_flatten, centerness_targets
+                    )
+                    / sum_centerness_targets_avg_per_gpu
             )
             centerness_loss = (
                 self.centerness_loss_func(centerness_flatten, centerness_targets)
             )
         else:
-            reg_loss = box_regression_flatten.sum()
+            reg_loss = tf.reduce_sum(box_regression_flatten)
             # reduce_sum(centerness_flatten.new_tensor([0.0]))
             centerness_loss = tf.reduce_sum(centerness_flatten)
 
@@ -772,3 +782,156 @@ class FCOSLossComputation(object):
             reg_loss=reg_loss, cls_loss=cls_loss, centerness_loss=centerness_loss
         )
         return losses
+
+
+class FCOSLoss(K.losses.Loss):
+    def __init__(self, feature_sizes=None, fpn_strides=None, center_sampling_radius=0, iou_loss_type="iou",
+                 norm_reg_targets=False,
+                 object_sizes_of_interest=None):
+        super(FCOSLoss, self).__init__()
+        if feature_sizes is None:
+            feature_sizes = [(64, 64), (32, 32), (16, 16), (8, 8), (4, 4)]
+        if object_sizes_of_interest is None:
+            object_sizes_of_interest = [[-1, 64], [64, 128], [128, 256], [256, 512], [512, 100000000], ]
+        if fpn_strides is None:
+            fpn_strides = [8, 16, 32, 64, 128]
+        # Hyper-params defined #
+        self.fpn_strides = fpn_strides
+        self.center_sampling_radius = center_sampling_radius
+        self.iou_loss_type = iou_loss_type
+        self.norm_reg_targets = norm_reg_targets
+        self.object_sizes_of_interest = tf.constant(object_sizes_of_interest)
+        # =========== Losses ============== #
+        self.cls_loss_func = tfa.losses.SigmoidFocalCrossEntropy()
+        self.box_reg_loss_func = IOULoss(self.iou_loss_type)
+        self.centerness_loss_func = K.losses.BinaryCrossentropy(from_logits=True)
+        # ========== Hyper-parameters definition ======== #
+        self.feature_sizes = feature_sizes
+        self.locations = self.compute_locations(feature_sizes)
+        self.stacked_locations = tf.concat(self.locations, axis=0)
+        self.object_sizes_of_interests = tf.concat(
+            [tf.tile(self.object_sizes_of_interest[n][tf.newaxis], multiples=(loc.shape[0], 1)) for n, loc in
+             enumerate(self.locations)], axis=0)
+        self.inf = 1e9
+        self.points_per_level = [feature_size[0] * feature_size[1] for feature_size in self.feature_sizes]
+
+    def compute_locations(self, features_sizes):
+        locations = []
+        for level, feature_size in enumerate(features_sizes):
+            h, w = feature_size[0], feature_size[1]
+            locations_per_level = self.compute_locations_per_level(h, w, self.fpn_strides[level])
+            locations.append(locations_per_level)
+        return locations
+
+    def compute_locations_per_level(self, h, w, stride):
+        shifts_x = tf.range(0, w * stride, delta=stride, dtype=tf.float32)
+        shifts_y = tf.range(0, h * stride, delta=stride, dtype=tf.float32)
+        shift_x, shift_y = tf.meshgrid(shifts_x, shifts_y)
+        shift_x = tf.reshape(shift_x, (-1,))
+        shift_y = tf.reshape(shift_y, (-1,))
+        locations = tf.stack((shift_x, shift_y), axis=1) + stride // 2
+        return locations
+
+    def compute_targets_for_location(self, bboxes, classes):
+        """
+        Calculate the regression targets for positive samples in batch given GT
+        :param bboxes: Bounding boxes in the batch x1, y1, x2, y2 format, (B, N, 4)
+        :param classes: Classes of each bounding box (B, N)
+        :param object_sizes_of_interest: Max allowed regression
+        :return: list of length batch size B [labels (total_features_length, 1), reg_targets (total_feature_length, 4)]
+        """
+        xs, ys = self.stacked_locations[:, 0], self.stacked_locations[:, 1]
+        labels_batch, reg_targets_batch = [], []
+        for bboxes_img, classes_img in zip(bboxes, classes):
+            if bboxes_img.shape[0] < 1:
+                continue
+            areas = tf.convert_to_tensor([(bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) for bbox in bboxes_img])
+            l = xs[:, tf.newaxis] - bboxes_img[:, 0]
+            r = -xs[:, tf.newaxis] + bboxes_img[:, 2]
+            t = ys[:, tf.newaxis] - bboxes_img[:, 1]
+            b = -ys[:, tf.newaxis] + bboxes_img[:, 3]
+            reg_targets = tf.stack([l, t, r, b], axis=2)
+            # TODO: Add center sampling later
+            is_in_boxes = tf.reduce_min(reg_targets, axis=-1) > 0
+            max_reg_targets_per_im = tf.cast(tf.reduce_max(reg_targets, axis=-1), dtype=tf.int32)
+            is_cared_in_the_level = (max_reg_targets_per_im >= self.object_sizes_of_interests[:, 0:1]) & (
+                        max_reg_targets_per_im <= self.object_sizes_of_interests[:, 1:])
+            locations_to_gt_area = tf.tile(areas[tf.newaxis], (self.stacked_locations.shape[0], 1))
+            # locations_to_gt_area[is_in_boxes] = self.inf
+            # locations_to_gt_area[is_cared_in_the_level == 0] = self.inf
+            locations_to_gt_area = tf.where(is_in_boxes, locations_to_gt_area, self.inf)
+            locations_to_gt_area = tf.where(is_cared_in_the_level, locations_to_gt_area, self.inf)
+            locations_to_min_area, locations_to_gt_inds = \
+                tf.reduce_min(locations_to_gt_area, axis=1), tf.argmin(locations_to_gt_area, axis=1)
+            # classes_img = classes_img[locations_to_gt_inds]
+            inds_from_class_axis = tf.concat([tf.cast(tf.range(reg_targets.shape[0])[..., tf.newaxis], dtype=tf.int64),
+                       locations_to_gt_inds[..., tf.newaxis]], axis=-1)
+            reg_targets_img = tf.gather_nd(reg_targets, inds_from_class_axis)
+            # reg_targets_img = tf.gather(bboxes_img, locations_to_gt_inds)
+            classes_img = tf.gather(classes_img, locations_to_gt_inds)
+
+            classes_img = tf.where(locations_to_min_area == self.inf, 0, classes_img)
+
+            labels_batch.append(classes_img)
+
+            reg_targets_batch.append(reg_targets_img)
+        return labels_batch, reg_targets_batch
+
+    def prepare_targets(self, gt_bboxes, gt_classes):
+        labels, reg_targets = self.compute_targets_for_location(gt_bboxes, gt_classes)
+        regs = tf.split(reg_targets, num_or_size_splits=self.points_per_level, axis=1)
+        if self.norm_reg_targets:
+            regs = [regs[n]/fpn_stride for n, fpn_stride in enumerate(self.fpn_strides)]
+        labs = tf.split(labels, num_or_size_splits=self.points_per_level, axis=1)
+        final_regs = [tf.reshape(reg, (-1, reg.shape[-1])) for reg in regs]
+        final_labs = [tf.reshape(lab, (-1,)) for lab in labs]
+        return final_labs, final_regs
+
+    def compute_centerness_targets(self, reg_targets):
+        left_right = reg_targets[:, [0, 2]]
+        top_bottom = reg_targets[:, [1, 3]]
+        centerness = (tf.reduce_min(left_right, axis=-1) / tf.reduce_max(left_right, axis=-1)) * \
+                     (tf.reduce_min(top_bottom, axis=-1) / tf.reduce_max(top_bottom, axis=-1))
+        return tf.math.sqrt(centerness)
+
+    def call(self, y_true, y_pred):
+        box_cls, box_reg, box_centerness = y_pred
+        bboxes, labels = y_true
+        labels, reg_targets = self.prepare_targets(bboxes, labels)
+        box_cls_flatten = [tf.reshape(x, shape=(-1, x.shape[-1])) for x in box_cls]
+        box_reg_flatten = [tf.reshape(x, shape=(-1, x.shape[-1])) for x in box_reg]
+        box_centerness_flatten = [tf.reshape(x, shape=(-1,)) for x in box_centerness]
+        box_cls_flatten = tf.concat(box_cls_flatten, axis=0)
+        box_reg_flatten = tf.concat(box_reg_flatten, axis=0)
+        box_centerness_flatten = tf.concat(box_centerness_flatten, axis=0)
+        labels_flatten = tf.concat(labels, axis=0)
+        reg_targets_flatten = tf.concat(reg_targets, axis=0)
+        inds = tf.experimental.numpy.nonzero(labels_flatten > 0)[0]
+        box_cls_flatten = tf.gather(box_cls_flatten, inds)
+        box_reg_flatten = tf.gather(box_reg_flatten, inds)
+        box_centerness_flatten = tf.gather(box_centerness_flatten, inds)
+        cls_loss = tf.reduce_sum(self.cls_loss_func(labels_flatten, box_cls_flatten)) / inds
+        if inds > 0:
+            centerness_targets = self.compute_centerness_targets(reg_targets_flatten)
+            reg_loss = tf.reduce_sum(self.box_reg_loss_func(reg_targets_flatten, box_reg_flatten, centerness_targets)) /inds
+            cnt_loss = tf.reduce_sum(self.centerness_loss_func(centerness_targets, box_centerness_flatten)) /inds
+        else:
+            reg_loss = tf.reduce_sum(box_reg_flatten)
+            cnt_loss = tf.reduce_sum(0)
+        return reg_loss, cls_loss, cnt_loss
+
+
+
+if __name__ == "__main__":
+    loss_calc = FCOSLoss(norm_reg_targets=True)
+    batch_size = 4
+    n_classes = 11
+    bboxes = tf.random.uniform((batch_size, 17, 4), maxval=512, dtype=tf.float32)
+    classes = tf.random.uniform((batch_size, 17,), maxval=n_classes, dtype=tf.int32)
+    # loss_calc.compute_targets_for_location(bboxes, classes)
+    # loss_calc.prepare_targets(bboxes, classes)
+    s = [(64, 64), (32, 32), (16, 16), (8, 8), (4, 4)]
+    box_cls = [tf.random.uniform((batch_size, shp[0], shp[1], n_classes)) for shp in s]
+    box_reg = [tf.random.uniform((batch_size, shp[0], shp[1], 4)) for shp in s]
+    box_cent = [tf.random.uniform((batch_size, shp[0], shp[1])) for shp in s]
+    loss_calc((bboxes, classes), (box_cls, box_reg, box_cent))

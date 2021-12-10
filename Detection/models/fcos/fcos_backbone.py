@@ -36,7 +36,7 @@ class ConvBlock(K.layers.Layer):
 
     def call(self, inputs, training=None, **kwargs):
         x = self.conv2d(inputs)
-        x = self.normalization(x, training)
+        x = self.normalization(x)
         x = self.activation(x)
 
         return x
@@ -118,14 +118,14 @@ class FPN(K.Model):
 
 def get_backbone_outputs():
     backbone = K.applications.ResNet50(include_top=False, weights='imagenet', input_shape=(512, 512, 3))
-    return extract_outputs_at_spatial_steps(backbone)
+    return extract_outputs_at_spatial_steps(backbone)[1:]
 
 
 if __name__ == "__main__":
 
     random = tf.random.uniform((1, 512, 512, 3))
     outputs = get_backbone_outputs()
-    fpn_outs = FPN(47, LastLevelMaxPool())(outputs)
+    fpn_outs = FPN(47, P6P7_level())(outputs)
     [print(fpn_out.shape) for fpn_out in outputs]
     print("------------------")
     [print(fpn_out.shape) for fpn_out in fpn_outs]

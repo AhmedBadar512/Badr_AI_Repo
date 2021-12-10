@@ -1,19 +1,30 @@
-from fcos_backbone import get_backbone_outputs, FPN, ConvBlock
+from fcos_backbone import P6P7_level
 import tensorflow as tf
 import tensorflow.keras as K
-from fcos_utils import FCOSHead, FCOSLossComputation
+from fcos_utils import FCOSHead, FCOSLossComputation, FCOSPostProcessor
 from fcos_backbone import FPN
 
 
 class FCOSModule(K.Model):
-    def __init__(self, box_selector_test, fpn_strides, img_size=(512, 512)):
+    def __init__(self, n_classes=11,
+                 fpn_strides=None,
+                 img_size=(512, 512),
+                 pre_nms_thresh=0.05,
+                 pre_nms_top_n=12000,
+                 nms_thresh=0.7,
+                 fpn_post_nms_top_n=2000,
+                 min_size=0):
         super(FCOSModule, self).__init__()
-        self.head = FCOSHead()
-        self.box_selector_test = box_selector_test
+        if fpn_strides is None:
+            fpn_strides = [8, 16, 32, 64, 128]
+        self.head = FCOSHead(n_classes)
+        self.box_selector_test = FCOSPostProcessor(pre_nms_thresh, pre_nms_top_n, nms_thresh, fpn_post_nms_top_n, min_size, n_classes)
         self.fpn_strides = fpn_strides
         self.image_size = [img_size[0], img_size[1]]
         self.loss_evaluator = FCOSLossComputation()
-        self.encoder = FPN()
+
+    def build(self, input_shape):
+        self.encoder = FPN(input_shape[0][-1], P6P7_level(input_shape[0][-1]))
 
     def call(self, inputs, training=None, targets=None):
         features = self.encoder(inputs)
