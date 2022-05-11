@@ -111,37 +111,39 @@ class TFRecordsSeg:
 
 
 if __name__ == "__main__":
-    classes = 150
-    dataset_name = "ade20k1"
-    train = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/training",
-                         label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/training",
-                         tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_train.tfrecords".format(dataset_name),
-                         classes=classes, img_pattern="*.jpg",
-                         label_pattern="*.png")
-    # train = TFRecordsSeg(data_dir="/data/input/datasets/cityscape_processed", tfrecord_path="/volumes1/train.tfrecords", split='train')
-    val = TFRecordsSeg(image_dir="/volumes2/datasets/ADEChallengeData2016/images/validation",
-                       label_dir="/volumes2/datasets/ADEChallengeData2016/annotations/validation",
-                       tfrecord_path="/data/input/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
-                       classes=classes, img_pattern="*.jpg",
-                       label_pattern="*.png")
-    train.write_tfrecords(training=True, dataset_name=dataset_name)
-    val.write_tfrecords()
-    # example = train
-    # image_dataset = example.read_tfrecords().repeat(10)
-    # cv2.namedWindow("img", 0)
-    # cv2.namedWindow("label", 0)
-    # for image_features in image_dataset:
-    #     img = image_features[0][..., ::-1]
-    #     label = image_features[1]
-    #     print(np.unique(label.numpy()))
-    #     insts = image_features[2]
-    #     cv2.imshow("img", img.numpy())
-    #     cv2.imshow("label", label.numpy()/classes)
-    #     cv2.waitKey()
+    classes = 34
+    dataset_name = "cityscapes"
+    os.makedirs("/data/input-ai/datasets/tf2_segmentation_tfrecords/", exist_ok=True)
+    train = TFRecordsSeg(image_dir="/volumes2/datasets/Generic/cityscapes/leftImg8bit/train",
+                         label_dir="/volumes2/datasets/Generic/cityscapes/gtFine/train",
+                         tfrecord_path="/data/input-ai/datasets/tf2_segmentation_tfrecords/{}_train.tfrecords".format(dataset_name),
+                         classes=classes, img_pattern="*.png",
+                         label_pattern="*labelIds.png")
+    val = TFRecordsSeg(image_dir="/volumes2/datasets/Generic/cityscapes/leftImg8bit/val",
+                       label_dir="/volumes2/datasets/Generic/cityscapes/gtFine/val",
+                       tfrecord_path="/data/input-ai/datasets/tf2_segmentation_tfrecords/{}_val.tfrecords".format(dataset_name),
+                       classes=classes, img_pattern="*.png",
+                       label_pattern="*labelIds.png")
+    # train.write_tfrecords(training=True, dataset_name=dataset_name)
+    # val.write_tfrecords()
 
-    #     print(image_features[0].shape, image_features[1].shape, image_features[2].shape)
-    # example.write_tfrecords()
-    # image_dataset = example.read_tfrecords().shuffle(10000)
-    #
-    # for image_features in image_dataset.take(10):
-    #     print(image_features[0].shape, image_features[1].numpy())
+
+    example = train
+    image_dataset = example.read_tfrecords().repeat(10)
+    cv2.namedWindow("img", 0)
+    cv2.namedWindow("label", 0)
+    for image_features in image_dataset:
+        img = image_features[0][..., ::-1]
+        label = image_features[1]
+        print(np.unique(label.numpy()))
+        # insts = image_features[2]
+        cv2.imshow("img", img.numpy())
+        cv2.imshow("label", label.numpy()/classes)
+        cv2.waitKey()
+
+        print(image_features[0].shape, image_features[1].shape)
+    example.write_tfrecords()
+    image_dataset = example.read_tfrecords().shuffle(10000)
+
+    for image_features in image_dataset.take(10):
+        print(image_features[0].shape, image_features[1].numpy())

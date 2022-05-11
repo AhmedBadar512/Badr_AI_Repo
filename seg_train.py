@@ -35,7 +35,7 @@ args.add_argument("-lrs", "--lr_scheduler", type=str, default="exp_decay", help=
 args.add_argument("-e", "--epochs", type=int, default=100, help="Number of epochs to train")
 args.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
 args.add_argument("--momentum", type=float, default=0.9, help="Momentum")
-args.add_argument("-l", "--logging_freq", type=int, default=1, help="Add to tfrecords after this many steps")
+args.add_argument("-l", "--logging_freq", type=int, default=10, help="Add to tfrecords after this many steps")
 args.add_argument("--loss", type=str, default="cross_entropy",
                   choices=["cross_entropy", "focal_loss", "binary_crossentropy", "RMI"],
                   help="Loss function")
@@ -49,7 +49,7 @@ args.add_argument("-l_m", "--load_model", type=str,
                   default=None,
                   help="Load model from path")
 args.add_argument("-s", "--save_dir", type=str, default="./runs", help="Save directory for models and tensorboard")
-args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input/datasets/tf2_segmentation_tfrecords",
+args.add_argument("-tfrecs", "--tf_record_path", type=str, default="/data/input-ai/datasets/tf2_segmentation_tfrecords",
                   help="Save directory that contains train and validation tfrecords")
 args.add_argument("-sb", "--shuffle_buffer", type=int, default=128, help="Size of the shuffle buffer")
 args.add_argument("--width", type=int, default=1024, help="Size of the shuffle buffer")
@@ -298,13 +298,13 @@ def write_to_tensorboard(curr_step, image_write_step, writer, logits, batch):
                               step=curr_step)
             tf.summary.scalar("mIoU", mIoU.result().numpy(),
                               step=curr_step)
-        if curr_step % write_image_summary_steps == 0:
-            conf_matrix = tf.math.confusion_matrix(gt, pred,
-                                                   num_classes=classes)
-            conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (
-                        tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
-            tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
-            write_summary_images(batch, logits)
+            if curr_step % write_image_summary_steps == 0:
+                conf_matrix = tf.math.confusion_matrix(gt, pred,
+                                                       num_classes=classes)
+                conf_matrix = tf.cast(conf_matrix, dtype=tf.float64) / (
+                            tf.cast(tf.reduce_sum(conf_matrix, axis=1), dtype=tf.float64) + 1e-6)
+                tf.summary.image("conf_matrix", conf_matrix[tf.newaxis, ..., tf.newaxis], step=curr_step)
+                write_summary_images(batch, logits)
     with writer.as_default():
         tmp = lr_scheduler(step=curr_step)
         tf.summary.scalar("Learning Rate", tmp, curr_step)
