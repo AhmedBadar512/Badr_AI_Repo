@@ -5,7 +5,7 @@ import tensorflow_probability as tfp
 
 class UNet(K.Model):
     def __init__(self,
-                 base_channels=64,
+                 base_channels=32,
                  fixed_size=False,
                  in_channels=3,
                  in_size=(512, 512),
